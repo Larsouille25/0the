@@ -1,5 +1,8 @@
 # Othebot
-Othebot est une intelligence artificiel qui gagne tout le temps (en théorie) aux jeu Othello (https://fr.wikipedia.org/wiki/Othello_(jeu) ), ce projete est fait en JavaScript avec electron et node js. Vous pouvez m'aider a le développer ici si vous voulez ^^
+Othebot integrate an Artificial Intelligence "Deep Q-Learning" based on the game [Othello](https://en.wikipedia.org/wiki/Reversi). You can train the AI without window and when the AI is trained you can play with it!
 
-# Auteur 
-Othebot a été conçu par Larsouille25.
+# Dependencies  
+Othebot use [lwlogger](https://github.com/Larsouille25/lwlogger) and [SFML](https://www.sfml-dev.org/index.php) for the window!
+
+# Your way to support me
+If you want to support my job, you can share this project and star it! Thanks!
