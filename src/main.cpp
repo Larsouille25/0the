@@ -1,5 +1,5 @@
 #include <iostream>
-#include "../include/lwlogger/logger.hpp"
+#include <lwlogger/logger.hpp>
 
 int main()
 {

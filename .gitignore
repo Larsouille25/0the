@@ -1,2 +1,4 @@
-builds/*
+build/*
 include/*
+bin/*
+.vscode/
