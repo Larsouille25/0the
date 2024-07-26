@@ -1,0 +1,9 @@
+[package]
+name = "othebot"
+version = "0.0.0"
+edition = "2021"
+license = "BSD-2-Clause"
+authors = ["Thibault Vincent <th1bault.vincent@proton.me>"]
+
+
+[dependencies]
