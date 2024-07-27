@@ -59,7 +59,7 @@ impl Display for Disc {
 }
 
 pub struct Board {
-    discs: [Disc; 64],
+    squares: [Disc; 64],
 }
 
 impl Board {
@@ -69,7 +69,7 @@ impl Board {
         use Disc::Empty as E;
         use Disc::White as W;
         Board {
-            discs: [
+            squares: [
                 E, E, E, E, E, E, E, E, // This
                 E, E, E, E, E, E, E, E, // is
                 E, E, E, E, E, E, E, E, // to
@@ -104,7 +104,7 @@ impl Board {
     #[inline]
     #[must_use]
     pub unsafe fn get_disc_unchecked(&self, col: u8, row: u8) -> Disc {
-        self.discs[(row * 8 + col) as usize]
+        self.squares[(row * 8 + col) as usize]
     }
 
     /// Change the disc at those coordinates, don't check if this move is legal.
@@ -114,7 +114,7 @@ impl Board {
         assert!(row < 8);
         // UNSAFE: we checked that they are in bounds
         let idx = (row * 8 + col) as usize;
-        *self.discs.get_mut(idx).unwrap() = disc;
+        *self.squares.get_mut(idx).unwrap() = disc;
     }
 
     /// Returns the scores of the current board, in the tuple, white's score is
@@ -122,7 +122,7 @@ impl Board {
     pub fn scores(&self) -> (u8, u8) {
         let mut white = 0;
         let mut black = 0;
-        for disc in self.discs {
+        for disc in self.squares {
             match disc {
                 Disc::White => white += 1,
                 Disc::Black => black += 1,
@@ -161,7 +161,7 @@ impl Board {
                 let idx = y * 8 + x;
 
                 // The disc is already filed
-                if self.discs[idx] != Disc::Empty {
+                if self.squares[idx] != Disc::Empty {
                     continue;
                 }
 
@@ -177,11 +177,11 @@ impl Board {
                     while nx >= 0 && nx < 8 && ny >= 0 && ny < 8 {
                         let n_idx = (ny * 8 + nx) as usize;
 
-                        if self.discs[n_idx] == Disc::Empty {
+                        if self.squares[n_idx] == Disc::Empty {
                             break;
                         }
 
-                        if self.discs[n_idx] == player {
+                        if self.squares[n_idx] == player {
                             if captured {
                                 // we already encountered an opposite disc, we
                                 // know it is a good move
@@ -341,7 +341,7 @@ impl Game {
             for col in 0..8 {
                 let idx = row * 8 + col;
                 let is_legal_move = (1 << idx) & legal_moves != 0;
-                let disc = self.board.discs[idx];
+                let disc = self.board.squares[idx];
                 print!("| ");
                 match disc {
                     Disc::White => print!("W"),
