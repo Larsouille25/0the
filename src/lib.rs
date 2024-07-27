@@ -10,7 +10,8 @@ pub const LICENSE: &str = include_str!("../LICENSE");
 
 #[derive(Debug, Clone)]
 pub enum OthebotError {
-    IllegalMove,
+    InvalidAlgebric(String),
+    IllegalMove { row: u8, col: u8 },
     LegalMovesNotComputed,
 }
 
@@ -19,7 +20,8 @@ impl Error for OthebotError {}
 impl Display for OthebotError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OthebotError::IllegalMove => write!(f, "illegal move, you can't put your disc here"),
+            OthebotError::InvalidAlgebric(notation) => write!(f, "invalid algebric notation {notation:?}, valid e.g: `a5`"),
+            OthebotError::IllegalMove{ row, col} => write!(f, "illegal move (row: {row}, col: {col}), you can't put your disc here"),
             OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves.")
         }
     }
@@ -214,7 +216,7 @@ impl Default for Board {
 /// `(6, 7)`, `(1, 6)`.
 pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
     if pos.len() != 2 {
-        return Err(OthebotError::IllegalMove);
+        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
     }
 
     let mut it = pos.chars();
@@ -222,10 +224,10 @@ pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
     let row = it.next().unwrap() as u8;
 
     if !(b'a'..=b'h').contains(&col) {
-        return Err(OthebotError::IllegalMove);
+        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
     }
     if !(b'1'..=b'8').contains(&row) {
-        return Err(OthebotError::IllegalMove);
+        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
     }
 
     Ok((col - b'a', row - b'1'))
@@ -266,15 +268,22 @@ impl Game {
         self.turn
     }
 
-    pub fn make_turn(&mut self, mov @ (row, col): (u8, u8)) -> Result<(), OthebotError> {
-        // ensure the move is inside the legal moves.
-        let idx = (row * 8 + col) as u64;
-        let Some(legal_moves) = self.current_legal_moves else {
+    fn is_legal(bitfield: u64, index: usize) -> bool {
+        (bitfield & (1 << index)) != 0
+    }
+
+    pub fn is_legal_move(&self, index: usize) -> Result<bool, OthebotError> {
+        let Some(moves) = self.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };
-        let mov_bitfield = 1 << idx;
-        if legal_moves & mov_bitfield == 0 {
-            return Err(OthebotError::IllegalMove);
+        Ok(Self::is_legal(moves, index))
+    }
+
+    pub fn make_turn(&mut self, mov @ (col, row): (u8, u8)) -> Result<(), OthebotError> {
+        // ensure the move is inside the legal moves.
+        let idx = (row * 8 + col) as u64;
+        if !self.is_legal_move(idx as usize)? {
+            return Err(OthebotError::IllegalMove { row, col });
         }
         self.board.change_disc(mov, self.turn);
         self.turn = !self.turn;
@@ -361,5 +370,9 @@ impl Game {
     /// Compute and store the legal moves of the current player.
     pub fn legal_moves(&mut self) {
         self.current_legal_moves = Some(self.board.legal_moves(self.turn()));
+    }
+
+    pub fn moves(&self) -> u64 {
+        self.current_legal_moves.unwrap()
     }
 }

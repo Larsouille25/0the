@@ -1,6 +1,8 @@
 use std::{
     error::Error,
     io::{self, Write},
+    thread::sleep,
+    time::Duration,
 };
 
 use othebot::{algebric2xy, Game, OthebotError, LICENSE, VERSION_AND_GIT_HASH};
@@ -21,12 +23,10 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
 
     let mut game = Game::new(white, black);
 
-    let i = 0;
     loop {
-        if i >= 10 {
+        if false {
             break;
         }
-
         game.legal_moves();
         game.render()?;
 
@@ -44,8 +44,12 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
                 Ok(p) => {
                     pos = p;
                 }
-                Err(e @ OthebotError::IllegalMove) => {
+                Err(e @ OthebotError::InvalidAlgebric(_)) => {
                     println!("{e}");
+                    // here we sleep to show the player we made an error
+                    // because after this error message the board will be
+                    // re-rendered and could confuse the player
+                    sleep(Duration::from_secs_f32(1.5));
                     break;
                 }
                 Err(e) => return Err(Box::new(e)),
@@ -53,7 +57,7 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
 
             match game.make_turn(pos) {
                 Ok(()) => break,
-                Err(e @ OthebotError::IllegalMove) => println!("{e}"),
+                Err(e @ OthebotError::IllegalMove { .. }) => println!("{e}"),
                 Err(e) => return Err(Box::new(e)),
             }
         }
