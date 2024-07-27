@@ -3,9 +3,10 @@ use std::{
     io::{self, Write},
 };
 
-use othebot::{algebric2xy, Game, LICENSE, VERSION_AND_GIT_HASH};
+use othebot::{algebric2xy, Game, OthebotError, LICENSE, VERSION_AND_GIT_HASH};
 
 pub fn start_game() -> Result<(), Box<dyn Error>> {
+    // TODO: change the err type of the result to OthebotError
     let mut black = String::new();
     print!("Black player's name: ");
     io::stdout().flush()?;
@@ -25,9 +26,11 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
         if i >= 10 {
             break;
         }
-        game.render();
 
-        let pos;
+        game.legal_moves();
+        game.render()?;
+
+        let mut pos;
         loop {
             let mut mov = String::new();
             print!("{} ({})'s turn: ", game.turn(), game.player_name());
@@ -36,19 +39,24 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
             // we pop the newline
             mov.pop();
             let res = algebric2xy(&mov);
+
             match res {
-                Some(p) => {
+                Ok(p) => {
                     pos = p;
+                }
+                Err(e @ OthebotError::IllegalMove) => {
+                    println!("{e}");
                     break;
                 }
-                None => {
-                    println!(r#"incorrect movement {mov:?}, e.g of movement "a4", "g8"."#);
-                    panic!();
-                }
+                Err(e) => return Err(Box::new(e)),
+            }
+
+            match game.make_turn(pos) {
+                Ok(()) => break,
+                Err(e @ OthebotError::IllegalMove) => println!("{e}"),
+                Err(e) => return Err(Box::new(e)),
             }
         }
-
-        game.make_turn(pos);
     }
 
     Ok(())

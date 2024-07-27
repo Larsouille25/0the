@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     fmt::{self, Display},
     ops::Not,
 };
@@ -6,6 +7,23 @@ use std::{
 pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
 
 pub const LICENSE: &str = include_str!("../LICENSE");
+
+#[derive(Debug, Clone)]
+pub enum OthebotError {
+    IllegalMove,
+    LegalMovesNotComputed,
+}
+
+impl Error for OthebotError {}
+
+impl Display for OthebotError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OthebotError::IllegalMove => write!(f, "illegal move, you can't put your disc here"),
+            OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves.")
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Disc {
@@ -87,8 +105,9 @@ impl Board {
         self.discs[(row * 8 + col) as usize]
     }
 
+    /// Change the disc at those coordinates, don't check if this move is legal.
     #[track_caller]
-    pub fn change_disc(&mut self, (col, row): (u8, u8), disc: Disc) {
+    fn change_disc(&mut self, (col, row): (u8, u8), disc: Disc) {
         assert!(col < 8);
         assert!(row < 8);
         // UNSAFE: we checked that they are in bounds
@@ -110,6 +129,78 @@ impl Board {
         }
         (white, black)
     }
+
+    /// Return the current legal moves for the `player` into a bitfield format.
+    ///
+    /// The first bit of the bitfield is the first disc at index 0 and the last
+    /// bit is index 63.
+    #[must_use]
+    #[track_caller]
+    pub fn legal_moves(&self, player: Disc) -> u64 {
+        let mut bitfield = 0;
+
+        if player == Disc::Empty {
+            panic!("The player should not be an empty disc.")
+        }
+
+        let directions: [(i32, i32); 8] = [
+            (-1, -1), // RIGHT UP
+            (0, -1),  // UP
+            (1, -1),  // LEFT-UP
+            (-1, 0),  // RIGHT
+            (1, 0),   // LEFT
+            (-1, 1),  // LEFT-DOWN
+            (0, -1),  // DOWN
+            (1, 1),   // RIGHT-DOWN
+        ];
+
+        for y in 0..8 {
+            for x in 0..8 {
+                let idx = y * 8 + x;
+
+                // The disc is already filed
+                if self.discs[idx] != Disc::Empty {
+                    continue;
+                }
+
+                for (dx, dy) in directions {
+                    // coordinates of next disc in direction
+                    let mut nx = x as i32 + dx;
+                    let mut ny = y as i32 + dy;
+
+                    // whetever a disc of the other color was present in the
+                    // line of the direction
+                    let mut captured = false;
+
+                    while nx >= 0 && nx < 8 && ny >= 0 && ny < 8 {
+                        let n_idx = (ny * 8 + nx) as usize;
+
+                        if self.discs[n_idx] == Disc::Empty {
+                            break;
+                        }
+
+                        if self.discs[n_idx] == player {
+                            if captured {
+                                // we already encountered an opposite disc, we
+                                // know it is a good move
+                                bitfield |= 1 << idx;
+                            }
+                            break;
+                        }
+                        // we encountered an opposite disc, so if later we
+                        // encounter in the same direction a disc of player's
+                        // color, it's a valid move
+                        captured = true;
+                        // update the coordinates to continue in this direction
+                        nx += dx;
+                        ny += dy;
+                    }
+                }
+            }
+        }
+
+        bitfield
+    }
 }
 
 impl Default for Board {
@@ -121,9 +212,9 @@ impl Default for Board {
 
 /// Converts an algebric notation like `a1`, `g8`, `b7` etc to `(0, 0)`,
 /// `(6, 7)`, `(1, 6)`.
-pub fn algebric2xy(pos: &str) -> Option<(u8, u8)> {
+pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
     if pos.len() != 2 {
-        return None;
+        return Err(OthebotError::IllegalMove);
     }
 
     let mut it = pos.chars();
@@ -131,18 +222,19 @@ pub fn algebric2xy(pos: &str) -> Option<(u8, u8)> {
     let row = it.next().unwrap() as u8;
 
     if !(b'a'..=b'h').contains(&col) {
-        return None;
+        return Err(OthebotError::IllegalMove);
     }
     if !(b'1'..=b'8').contains(&row) {
-        return None;
+        return Err(OthebotError::IllegalMove);
     }
 
-    Some((col - b'a', row - b'1'))
+    Ok((col - b'a', row - b'1'))
 }
 
 pub struct Game {
     board: Board,
 
+    // TODO: if the given usernames are empty, don't use them, use instead their color.
     /// White player name
     white_player: String,
 
@@ -155,6 +247,8 @@ pub struct Game {
     ///
     /// `turn` cannot be `Disc::Empty`.
     turn: Disc,
+    /// The legal moves of the current player (`turn` field).
+    current_legal_moves: Option<u64>,
 }
 
 impl Game {
@@ -164,6 +258,7 @@ impl Game {
             white_player: white_player.into(),
             black_player: black_player.into(),
             turn: Disc::Black,
+            current_legal_moves: None,
         }
     }
 
@@ -171,9 +266,21 @@ impl Game {
         self.turn
     }
 
-    pub fn make_turn(&mut self, mov: (u8, u8)) {
+    pub fn make_turn(&mut self, mov @ (row, col): (u8, u8)) -> Result<(), OthebotError> {
+        // ensure the move is inside the legal moves.
+        let idx = (row * 8 + col) as u64;
+        let Some(legal_moves) = self.current_legal_moves else {
+            return Err(OthebotError::LegalMovesNotComputed);
+        };
+        let mov_bitfield = 1 << idx;
+        if legal_moves & mov_bitfield == 0 {
+            return Err(OthebotError::IllegalMove);
+        }
         self.board.change_disc(mov, self.turn);
         self.turn = !self.turn;
+
+        self.current_legal_moves = None;
+        Ok(())
     }
 
     #[inline]
@@ -199,7 +306,12 @@ impl Game {
     }
 
     /// Renders the board game to stdout
-    pub fn render(&self) {
+    pub fn render(&self) -> Result<(), OthebotError> {
+        // TODO: Add colors.
+        let Some(legal_moves) = self.current_legal_moves else {
+            return Err(OthebotError::LegalMovesNotComputed);
+        };
+
         for row in 0..8 {
             print!("+---+---+---+---+---+---+---+---+");
 
@@ -218,11 +330,14 @@ impl Game {
             println!();
 
             for col in 0..8 {
-                let disc = unsafe { self.board.get_disc_unchecked(col, row) };
+                let idx = row * 8 + col;
+                let is_legal_move = (1 << idx) & legal_moves != 0;
+                let disc = self.board.discs[idx];
                 print!("| ");
                 match disc {
                     Disc::White => print!("W"),
                     Disc::Black => print!("B"),
+                    Disc::Empty if is_legal_move => print!("•"),
                     Disc::Empty => print!(" "),
                 }
                 print!(" ");
@@ -239,5 +354,12 @@ impl Game {
         }
         println!("+---+---+---+---+---+---+---+---+");
         println!("  a   b   c   d   e   f   g   h");
+
+        Ok(())
+    }
+
+    /// Compute and store the legal moves of the current player.
+    pub fn legal_moves(&mut self) {
+        self.current_legal_moves = Some(self.board.legal_moves(self.turn()));
     }
 }
