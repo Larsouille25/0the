@@ -152,7 +152,7 @@ impl Board {
             (-1, 0),  // RIGHT
             (1, 0),   // LEFT
             (-1, 1),  // LEFT-DOWN
-            (0, -1),  // DOWN
+            (0, 1),   // DOWN
             (1, 1),   // RIGHT-DOWN
         ];
 
@@ -203,6 +203,77 @@ impl Board {
 
         bitfield
     }
+
+    /// Compute the discs that will be outflanked from a move.
+    ///
+    /// # Note
+    ///
+    /// If you try to know which move is legal, you should use the
+    /// [`legal_moves`] method.
+    ///
+    /// [`legal_moves`]: Board::legal_moves
+    pub fn move_outflanks(&self, player: Disc, (x, y): (u8, u8)) -> u64 {
+        let mut bitfield = 0;
+
+        if player == Disc::Empty {
+            panic!("The player should not be an empty disc.")
+        }
+
+        // TODO: make this kinda global because in `legal_moves` we have the
+        // same slice.
+        let directions: [(i32, i32); 8] = [
+            (-1, -1), // RIGHT UP
+            (0, -1),  // UP
+            (1, -1),  // LEFT-UP
+            (-1, 0),  // RIGHT
+            (1, 0),   // LEFT
+            (-1, 1),  // LEFT-DOWN
+            (0, 1),   // DOWN
+            (1, 1),   // RIGHT-DOWN
+        ];
+
+        for (dx, dy) in directions {
+            let mut nx = x as i32 + dx;
+            let mut ny = y as i32 + dy;
+            // this is a bitfield that contains opponent's discs that could be
+            // outflanked if it is correctly sandwiched
+            let mut may_outflank = 0;
+
+            while (0..8).contains(&nx) && (0..8).contains(&ny) {
+                let n_idx = (ny * 8 + nx) as usize;
+
+                if self.squares[n_idx] == Disc::Empty {
+                    break;
+                }
+
+                if self.squares[n_idx] == player {
+                    if may_outflank != 0 {
+                        // We are able to outflank at least one opponent's disc
+                        bitfield |= may_outflank;
+                        break;
+                    }
+                    // No opponent's discs can be outflanked
+                }
+                may_outflank |= 1 << n_idx;
+                nx += dx;
+                ny += dy;
+            }
+        }
+
+        bitfield
+    }
+
+    /// Put the discs (`player` arg) according to the provided bitfield.
+    ///
+    /// The first bit of the bitfield is the first disc at index 0 and the last
+    /// bit is index 63. (just like legal_moves)
+    pub fn put_discs(&mut self, bitfield: u64, player: Disc) {
+        for i in 0..self.squares.len() {
+            if ((1 as u64) << i & bitfield) != 0 {
+                self.squares[i] = player;
+            }
+        }
+    }
 }
 
 impl Default for Board {
@@ -231,6 +302,16 @@ pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
     }
 
     Ok((col - b'a', row - b'1'))
+}
+
+pub fn bitfield_to_indexes(bitfield: u64) -> Vec<usize> {
+    let mut positions = Vec::new();
+    for i in 0..64 {
+        if (bitfield & (1 << i)) != 0 {
+            positions.push(i);
+        }
+    }
+    positions
 }
 
 pub struct Game {
@@ -286,6 +367,9 @@ impl Game {
             return Err(OthebotError::IllegalMove { row, col });
         }
         self.board.change_disc(mov, self.turn);
+        let outflanks = self.board.move_outflanks(self.turn, mov);
+        self.board.put_discs(outflanks, self.turn);
+
         self.turn = !self.turn;
 
         self.current_legal_moves = None;
