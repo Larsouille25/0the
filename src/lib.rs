@@ -1,18 +1,23 @@
 use std::{
     error::Error,
     fmt::{self, Display},
+    io::{self, Write},
     ops::Not,
 };
 
-pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
+use termcolor::{StandardStream, WriteColor};
 
+pub mod style;
+
+pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
 pub const LICENSE: &str = include_str!("../LICENSE");
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum OthebotError {
     InvalidAlgebric(String),
     IllegalMove { row: u8, col: u8 },
     LegalMovesNotComputed,
+    IoError(io::Error),
 }
 
 impl Error for OthebotError {}
@@ -22,8 +27,15 @@ impl Display for OthebotError {
         match self {
             OthebotError::InvalidAlgebric(notation) => write!(f, "invalid algebric notation {notation:?}, valid e.g: `a5`"),
             OthebotError::IllegalMove{ row, col} => write!(f, "illegal move (row: {row}, col: {col}), you can't put your disc here"),
-            OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves.")
+            OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves."),
+            OthebotError::IoError(e) => write!(f, "IO ERROR: {e}"),
         }
+    }
+}
+
+impl From<io::Error> for OthebotError {
+    fn from(value: io::Error) -> Self {
+        OthebotError::IoError(value)
     }
 }
 
@@ -375,13 +387,21 @@ impl Game {
     #[inline]
     #[must_use]
     pub fn white_name(&self) -> &str {
-        &self.white_player
+        if self.white_player.is_empty() {
+            "White"
+        } else {
+            &self.white_player
+        }
     }
 
     #[inline]
     #[must_use]
     pub fn black_name(&self) -> &str {
-        &self.black_player
+        if self.black_player.is_empty() {
+            "Black"
+        } else {
+            &self.black_player
+        }
     }
 
     #[inline]
@@ -395,54 +415,83 @@ impl Game {
     }
 
     /// Renders the board game to stdout
-    pub fn render(&self) -> Result<(), OthebotError> {
-        // TODO: Add colors.
+    pub fn render(&self, s: &mut StandardStream) -> Result<(), OthebotError> {
         let Some(legal_moves) = self.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };
 
         for row in 0..8 {
-            print!("+---+---+---+---+---+---+---+---+");
+            s.set_color(&style::BOARD_EDGES)?;
+            write!(s, "+---+---+---+---+---+---+---+---+")?;
+            s.reset()?;
 
             // print the scores
             if row == 7 {
                 let (white_score, black_score) = self.board.scores();
-                print!(
-                    "    {}: {}  {}: {}",
-                    self.black_name(),
-                    black_score,
-                    self.white_name(),
-                    white_score,
-                );
+                write!(s, "    ")?;
+
+                s.set_color(&style::BLACK_PLAYER)?;
+                write!(s, "{}", self.black_name())?;
+                s.reset()?;
+                write!(s, ": {black_score}  ")?;
+
+                s.set_color(&style::WHITE_PLAYER)?;
+                write!(s, "{}", self.white_name())?;
+                s.reset()?;
+                write!(s, ": {white_score}")?;
             }
 
-            println!();
+            writeln!(s)?;
 
             for col in 0..8 {
                 let idx = row * 8 + col;
                 let is_legal_move = (1 << idx) & legal_moves != 0;
                 let disc = self.board.squares[idx];
-                print!("| ");
+
+                s.set_color(&style::BOARD_EDGES)?;
+                write!(s, "|")?;
+                s.reset()?;
+
                 match disc {
-                    Disc::White => print!("W"),
-                    Disc::Black => print!("B"),
-                    Disc::Empty if is_legal_move => print!("•"),
-                    Disc::Empty => print!(" "),
+                    Disc::White => {
+                        s.set_color(&style::WHITE_PLAYER)?;
+                        write!(s, " W ")?;
+                    }
+                    Disc::Black => {
+                        s.set_color(&style::BLACK_PLAYER)?;
+                        write!(s, " B ")?;
+                    }
+                    Disc::Empty if is_legal_move => {
+                        s.set_color(&style::LEGAL_MOVE)?;
+                        write!(s, " • ")?;
+                    }
+                    Disc::Empty => write!(s, "   ")?,
                 }
-                print!(" ");
+                s.reset()?;
             }
 
-            print!("| {}", row + 1);
+            s.set_color(&style::BOARD_EDGES)?;
+            write!(s, "|")?;
+            s.reset()?;
+
+            s.set_color(&style::WHITE_BOLD)?;
+            write!(s, " {}", row + 1)?;
 
             // print the score
             if row == 6 {
-                print!("  SCORES:");
+                write!(s, "  SCORES:")?;
             }
+            s.reset()?;
 
-            println!();
+            writeln!(s)?;
         }
-        println!("+---+---+---+---+---+---+---+---+");
-        println!("  a   b   c   d   e   f   g   h");
+        s.set_color(&style::BOARD_EDGES)?;
+        writeln!(s, "+---+---+---+---+---+---+---+---+")?;
+        s.reset()?;
+
+        s.set_color(&style::WHITE_BOLD)?;
+        writeln!(s, "  a   b   c   d   e   f   g   h")?;
+        s.reset()?;
 
         Ok(())
     }

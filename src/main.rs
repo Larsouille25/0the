@@ -6,8 +6,9 @@ use std::{
 };
 
 use othebot::{algebric2xy, Game, OthebotError, LICENSE, VERSION_AND_GIT_HASH};
+use termcolor::{ColorChoice, StandardStream};
 
-pub fn start_game() -> Result<(), Box<dyn Error>> {
+pub fn start_game() -> Result<(), OthebotError> {
     // TODO: change the err type of the result to OthebotError
     let mut black = String::new();
     print!("Black player's name: ");
@@ -21,6 +22,8 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
     io::stdin().read_line(&mut white)?;
     white.pop();
 
+    let mut s = StandardStream::stdout(ColorChoice::Auto);
+
     let mut game = Game::new(white, black);
 
     loop {
@@ -28,7 +31,7 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
             break;
         }
         game.legal_moves();
-        game.render()?;
+        game.render(&mut s)?;
 
         let mut pos;
         loop {
@@ -52,13 +55,13 @@ pub fn start_game() -> Result<(), Box<dyn Error>> {
                     sleep(Duration::from_secs_f32(1.5));
                     break;
                 }
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => return Err(e),
             }
 
             match game.make_turn(pos) {
                 Ok(()) => break,
                 Err(e @ OthebotError::IllegalMove { .. }) => println!("{e}"),
-                Err(e) => return Err(Box::new(e)),
+                Err(e) => return Err(e),
             }
         }
     }
