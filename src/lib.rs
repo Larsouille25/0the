@@ -174,7 +174,7 @@ impl Board {
                     // line of the direction
                     let mut captured = false;
 
-                    while nx >= 0 && nx < 8 && ny >= 0 && ny < 8 {
+                    while (0..8).contains(&nx) && (0..8).contains(&ny) {
                         let n_idx = (ny * 8 + nx) as usize;
 
                         if self.squares[n_idx] == Disc::Empty {
@@ -243,16 +243,15 @@ impl Board {
                 let n_idx = (ny * 8 + nx) as usize;
 
                 if self.squares[n_idx] == Disc::Empty {
+                    // Not a correct sandwich of opponent's disc, because there
+                    // is a gap
                     break;
                 }
 
-                if self.squares[n_idx] == player {
-                    if may_outflank != 0 {
-                        // We are able to outflank at least one opponent's disc
-                        bitfield |= may_outflank;
-                        break;
-                    }
-                    // No opponent's discs can be outflanked
+                if self.squares[n_idx] == player && may_outflank != 0 {
+                    // We are able to outflank at least one opponent's disc
+                    bitfield |= may_outflank;
+                    break;
                 }
                 may_outflank |= 1 << n_idx;
                 nx += dx;
@@ -269,7 +268,7 @@ impl Board {
     /// bit is index 63. (just like legal_moves)
     pub fn put_discs(&mut self, bitfield: u64, player: Disc) {
         for i in 0..self.squares.len() {
-            if ((1 as u64) << i & bitfield) != 0 {
+            if (1_u64 << i & bitfield) != 0 {
                 self.squares[i] = player;
             }
         }
@@ -294,10 +293,7 @@ pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
     let col = it.next().unwrap() as u8;
     let row = it.next().unwrap() as u8;
 
-    if !(b'a'..=b'h').contains(&col) {
-        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
-    }
-    if !(b'1'..=b'8').contains(&row) {
+    if !(b'a'..=b'h').contains(&col) || !(b'1'..=b'8').contains(&row) {
         return Err(OthebotError::InvalidAlgebric(pos.to_string()));
     }
 
