@@ -1,8 +1,10 @@
 use std::{
+    borrow::Cow,
     error::Error,
     fmt::{self, Display},
     io::{self, Write},
     ops::Not,
+    str::FromStr,
 };
 
 use termcolor::{StandardStream, WriteColor};
@@ -291,6 +293,43 @@ impl Default for Board {
     #[inline]
     fn default() -> Self {
         Board::new()
+    }
+}
+
+impl FromStr for Board {
+    type Err = Cow<'static, str>;
+
+    /// The board can be constructed from a string, [the format is common to
+    /// othello programs.][this-articles]
+    ///
+    /// `XO---XXX-OOO-OOO-OOOOOO---OOXO---OOXOOO-OOXOOOOOXXXXX---XXXXXX--`
+    /// In this notation, dashes (`-`) represent empty squares, `X` represent
+    /// black discs and `O` represent White's discs. The string is 64 character
+    /// long.
+    ///
+    /// [this-article]: https://mirror.math.princeton.edu/pub/CTAN/macros/latex/contrib/othelloboard/othelloboard.pdf#page=8
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // TODO: write tests for this function
+        if s.len() != 64 {
+            return Err("The notation must be 64 characters long.".into());
+        }
+        let mut board = [Disc::Empty; 64];
+        for (i, c) in s.char_indices() {
+            match c {
+                '-' =>
+                    /* we do nothing because it is already an empty square*/
+                    {}
+                'O' => board[i] = Disc::White,
+                'X' => board[i] = Disc::Black,
+                ch => {
+                    return Err(format!(
+                        "{ch:?} is not a valid character inside the othello notation"
+                    )
+                    .into())
+                }
+            }
+        }
+        Ok(Board { squares: board })
     }
 }
 
