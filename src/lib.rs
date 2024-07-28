@@ -9,10 +9,17 @@ use std::{
 
 use termcolor::{StandardStream, WriteColor};
 
+pub mod player;
 pub mod style;
 
 pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
 pub const LICENSE: &str = include_str!("../LICENSE");
+/// The [official rules][or] of the Othello game of the
+/// [World Othello Federation][wof].
+///
+/// [or]: https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english
+/// [wof]: https://www.worldothello.org
+pub const OTHELLO_RULES: &str = include_str!("../OTHELLO_RULES");
 
 #[derive(Debug)]
 pub enum OthebotError {
@@ -364,7 +371,6 @@ pub fn bitfield_to_indexes(bitfield: u64) -> Vec<usize> {
 pub struct Game {
     board: Board,
 
-    // TODO: if the given usernames are empty, don't use them, use instead their color.
     /// White player name
     white_player: String,
 

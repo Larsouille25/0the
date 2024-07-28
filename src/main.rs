@@ -5,11 +5,10 @@ use std::{
     time::Duration,
 };
 
-use othebot::{algebric2xy, Game, OthebotError, LICENSE, VERSION_AND_GIT_HASH};
+use othebot::{algebric2xy, Game, OthebotError, LICENSE, OTHELLO_RULES, VERSION_AND_GIT_HASH};
 use termcolor::{ColorChoice, StandardStream};
 
 pub fn start_game() -> Result<(), OthebotError> {
-    // TODO: change the err type of the result to OthebotError
     let mut black = String::new();
     print!("Black player's name: ");
     io::stdout().flush()?;
@@ -77,7 +76,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 {}
 
 COMMANDS:
-    game, g             Start a new game
+    play, p             Start a new game
+    rules               Print the rules of Othello
     license             Prints the license of the program
     help, h             Prints this message
     quit, q             Quit of the program\
@@ -97,7 +97,8 @@ COMMANDS:
         cmd.pop();
 
         match cmd.as_str() {
-            "game" | "g" => start_game()?,
+            "play" | "p" => start_game()?,
+            "rules" => println!("{}", OTHELLO_RULES),
             "license" => println!("{}", LICENSE),
             "help" | "h" => println!("{help}"),
             "quit" | "q" => break,
