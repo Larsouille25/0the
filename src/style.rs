@@ -24,4 +24,8 @@ lazy_static! {
         .set_fg(Some(Color::Ansi256(15)))
         .set_bold(true)
         .clone();
+    pub static ref ERROR: ColorSpec = ColorSpec::new()
+        .set_fg(Some(Color::Red))
+        .set_bold(true)
+        .clone();
 }

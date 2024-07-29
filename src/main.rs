@@ -1,14 +1,16 @@
 use std::{
     error::Error,
     io::{self, Write},
-    thread::sleep,
-    time::Duration,
+    str::FromStr,
 };
 
-use othebot::{algebric2xy, Game, OthebotError, LICENSE, OTHELLO_RULES, VERSION_AND_GIT_HASH};
+use othebot::{
+    player::HumanPlayer, Board, Disc, Game, OthebotError, LICENSE, OTHELLO_RULES,
+    VERSION_AND_GIT_HASH,
+};
 use termcolor::{ColorChoice, StandardStream};
 
-pub fn start_game() -> Result<(), OthebotError> {
+pub fn start_game(notation: Option<&str>) -> Result<(), OthebotError> {
     let mut black = String::new();
     print!("Black player's name: ");
     io::stdout().flush()?;
@@ -21,49 +23,16 @@ pub fn start_game() -> Result<(), OthebotError> {
     io::stdin().read_line(&mut white)?;
     white.pop();
 
-    let mut s = StandardStream::stdout(ColorChoice::Auto);
+    let s = StandardStream::stdout(ColorChoice::Auto);
 
-    let mut game = Game::new(white, black);
-
-    loop {
-        if false {
-            break;
-        }
-        game.legal_moves();
-        game.render(&mut s)?;
-
-        let mut pos;
-        loop {
-            let mut mov = String::new();
-            print!("{} ({})'s turn: ", game.turn(), game.player_name());
-            io::stdout().flush()?;
-            io::stdin().read_line(&mut mov)?;
-            // we pop the newline
-            mov.pop();
-            let res = algebric2xy(&mov);
-
-            match res {
-                Ok(p) => {
-                    pos = p;
-                }
-                Err(e @ OthebotError::InvalidAlgebric(_)) => {
-                    println!("{e}");
-                    // here we sleep to show the player we made an error
-                    // because after this error message the board will be
-                    // re-rendered and could confuse the player
-                    sleep(Duration::from_secs_f32(1.5));
-                    break;
-                }
-                Err(e) => return Err(e),
-            }
-
-            match game.make_turn(pos) {
-                Ok(()) => break,
-                Err(e @ OthebotError::IllegalMove { .. }) => println!("{e}"),
-                Err(e) => return Err(e),
-            }
-        }
-    }
+    let white_player = Box::new(HumanPlayer::new(Disc::White, white));
+    let black_player = Box::new(HumanPlayer::new(Disc::Black, black));
+    let mut game = if let Some(notation) = notation {
+        Game::with_board(Board::from_str(notation)?, white_player, black_player, s)
+    } else {
+        Game::new(white_player, black_player, s)
+    };
+    game.play()?;
 
     Ok(())
 }
@@ -77,6 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 COMMANDS:
     play, p             Start a new game
+    import <notation>   Import a game using the Othello Notation.
     rules               Print the rules of Othello
     license             Prints the license of the program
     help, h             Prints this message
@@ -96,12 +66,17 @@ COMMANDS:
         // remove the newline
         cmd.pop();
 
-        match cmd.as_str() {
-            "play" | "p" => start_game()?,
-            "rules" => println!("{}", OTHELLO_RULES),
-            "license" => println!("{}", LICENSE),
-            "help" | "h" => println!("{help}"),
-            "quit" | "q" => break,
+        let vec = cmd.split_whitespace().collect::<Vec<_>>();
+        let args = vec.as_slice();
+
+        match args {
+            // TODO: don't return here when calling `start_game`
+            ["play" | "p"] => start_game(None)?,
+            ["import", notation] => start_game(Some(notation))?,
+            ["rules"] => println!("{}", OTHELLO_RULES),
+            ["license"] => println!("{}", LICENSE),
+            ["help" | "h"] => println!("{help}"),
+            ["quit" | "q"] => break,
             unknown => println!(r#"Unknown command {unknown:?}, type "help" for help."#),
         }
         println!();

@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    cell::RefCell,
     error::Error,
     fmt::{self, Display},
     io::{self, Write},
@@ -7,6 +8,7 @@ use std::{
     str::FromStr,
 };
 
+use player::Player;
 use termcolor::{StandardStream, WriteColor};
 
 pub mod player;
@@ -21,12 +23,16 @@ pub const LICENSE: &str = include_str!("../LICENSE");
 /// [wof]: https://www.worldothello.org
 pub const OTHELLO_RULES: &str = include_str!("../OTHELLO_RULES");
 
+pub(crate) type Result<T, E = OthebotError> = std::result::Result<T, E>;
+
 #[derive(Debug)]
 pub enum OthebotError {
     InvalidAlgebric(String),
     IllegalMove { row: u8, col: u8 },
     LegalMovesNotComputed,
     IoError(io::Error),
+    InvalidLenghtOfNotation,
+    InvalidCharInNotation { ch: char },
 }
 
 impl Error for OthebotError {}
@@ -38,6 +44,8 @@ impl Display for OthebotError {
             OthebotError::IllegalMove{ row, col} => write!(f, "illegal move (row: {row}, col: {col}), you can't put your disc here"),
             OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves."),
             OthebotError::IoError(e) => write!(f, "IO ERROR: {e}"),
+            OthebotError::InvalidLenghtOfNotation => write!(f, "the Othello Notation must be 64 characters long"),
+            OthebotError::InvalidCharInNotation { ch } => write!(f, "invalid character {ch:?} in Othello Notation"),
         }
     }
 }
@@ -79,6 +87,7 @@ impl Display for Disc {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
     squares: [Disc; 64],
 }
@@ -130,7 +139,7 @@ impl Board {
 
     /// Change the disc at those coordinates, don't check if this move is legal.
     #[track_caller]
-    fn change_disc(&mut self, (col, row): (u8, u8), disc: Disc) {
+    fn change_disc(&mut self, Move { col, row }: Move, disc: Disc) {
         assert!(col < 8);
         assert!(row < 8);
         // UNSAFE: we checked that they are in bounds
@@ -139,18 +148,19 @@ impl Board {
     }
 
     /// Returns the scores of the current board, in the tuple, white's score is
-    /// first, and black's score is second
-    pub fn scores(&self) -> (u8, u8) {
+    /// first, and black's score is second, and empty squares third
+    pub fn scores(&self) -> (u8, u8, u8) {
         let mut white = 0;
         let mut black = 0;
+        let mut empty = 0;
         for disc in self.squares {
             match disc {
                 Disc::White => white += 1,
                 Disc::Black => black += 1,
-                Disc::Empty => {}
+                Disc::Empty => empty += 1,
             }
         }
-        (white, black)
+        (white, black, empty)
     }
 
     /// Return the current legal moves for the `player` into a bitfield format.
@@ -233,7 +243,7 @@ impl Board {
     /// [`legal_moves`] method.
     ///
     /// [`legal_moves`]: Board::legal_moves
-    pub fn move_outflanks(&self, player: Disc, (x, y): (u8, u8)) -> u64 {
+    pub fn move_outflanks(&self, player: Disc, Move { col: x, row: y }: Move) -> u64 {
         let mut bitfield = 0;
 
         if player == Disc::Empty {
@@ -304,7 +314,7 @@ impl Default for Board {
 }
 
 impl FromStr for Board {
-    type Err = Cow<'static, str>;
+    type Err = OthebotError;
 
     /// The board can be constructed from a string, [the format is common to
     /// othello programs.][this-articles]
@@ -318,7 +328,8 @@ impl FromStr for Board {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: write tests for this function
         if s.len() != 64 {
-            return Err("The notation must be 64 characters long.".into());
+            dbg!(s.len());
+            return Err(OthebotError::InvalidLenghtOfNotation);
         }
         let mut board = [Disc::Empty; 64];
         for (i, c) in s.char_indices() {
@@ -329,10 +340,7 @@ impl FromStr for Board {
                 'O' => board[i] = Disc::White,
                 'X' => board[i] = Disc::Black,
                 ch => {
-                    return Err(format!(
-                        "{ch:?} is not a valid character inside the othello notation"
-                    )
-                    .into())
+                    return Err(OthebotError::InvalidCharInNotation { ch });
                 }
             }
         }
@@ -340,9 +348,27 @@ impl FromStr for Board {
     }
 }
 
+/// A position on the Othello Board
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Move {
+    pub col: u8,
+    pub row: u8,
+}
+
+impl Move {
+    pub fn from_algebric(pos: &str) -> Result<Move> {
+        let (col, row) = algebric2xy(pos)?;
+        Ok(Move { col, row })
+    }
+
+    pub fn into_idx(self) -> usize {
+        self.row as usize * 8 + self.col as usize
+    }
+}
+
 /// Converts an algebric notation like `a1`, `g8`, `b7` etc to `(0, 0)`,
 /// `(6, 7)`, `(1, 6)`.
-pub fn algebric2xy(pos: &str) -> Result<(u8, u8), OthebotError> {
+fn algebric2xy(pos: &str) -> Result<(u8, u8)> {
     if pos.len() != 2 {
         return Err(OthebotError::InvalidAlgebric(pos.to_string()));
     }
@@ -368,15 +394,32 @@ pub fn bitfield_to_indexes(bitfield: u64) -> Vec<usize> {
     positions
 }
 
+#[derive(Debug, Clone)]
+pub enum State {
+    /// The game is currently being played.
+    Playing,
+    /// One of the player winned the game.
+    Winned {
+        /// Who won the game?
+        winner_color: Disc,
+        /// Championship style score, the winner's score include empty squares
+        winner_score: u8,
+        /// Championship style score, the winner's score include empty squares
+        loser_score: u8,
+    },
+    /// The game ended in an equality of scores.
+    Draw,
+    /// The current player cannot play, his turn is forfeited (Rule no. 2)
+    TurnForfeited,
+}
+
+#[derive(Debug)]
 pub struct Game {
     board: Board,
-
-    /// White player name
-    white_player: String,
-
-    /// Black player name
-    black_player: String,
-
+    /// Black player
+    black_player: Box<dyn Player>,
+    /// White player
+    white_player: Box<dyn Player>,
     /// Who's next turn?
     ///
     /// Note:
@@ -385,20 +428,45 @@ pub struct Game {
     turn: Disc,
     /// The legal moves of the current player (`turn` field).
     current_legal_moves: Option<u64>,
+    /// The stream, usualy stdout where we render the game.
+    stream: RefCell<StandardStream>,
+    /// The state of the game
+    state: State,
 }
 
 impl Game {
-    pub fn new(white_player: impl Into<String>, black_player: impl Into<String>) -> Game {
+    pub fn new(
+        white_player: Box<dyn Player>,
+        black_player: Box<dyn Player>,
+        stream: StandardStream,
+    ) -> Game {
+        Game::with_board(Board::new(), white_player, black_player, stream)
+    }
+
+    pub fn with_board(
+        board: Board,
+        white_player: Box<dyn Player>,
+        black_player: Box<dyn Player>,
+        stream: StandardStream,
+    ) -> Game {
+        // TODO: found a better solution for this issue with the colors, don't
+        // let the user have the choice of the color
+        assert_eq!(white_player.color(), Disc::White);
+        assert_eq!(black_player.color(), Disc::Black);
+
         Game {
-            board: Board::new(),
-            white_player: white_player.into(),
-            black_player: black_player.into(),
+            board,
+            white_player,
+            black_player,
             turn: Disc::Black,
             current_legal_moves: None,
+            stream: RefCell::new(stream),
+            state: State::Playing,
         }
     }
 
     pub fn turn(&self) -> Disc {
+        debug_assert_ne!(self.turn, Disc::Empty);
         self.turn
     }
 
@@ -406,14 +474,14 @@ impl Game {
         (bitfield & (1 << index)) != 0
     }
 
-    pub fn is_legal_move(&self, index: usize) -> Result<bool, OthebotError> {
+    pub fn is_legal_move(&self, index: usize) -> Result<bool> {
         let Some(moves) = self.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };
         Ok(Self::is_legal(moves, index))
     }
 
-    pub fn make_turn(&mut self, mov @ (col, row): (u8, u8)) -> Result<(), OthebotError> {
+    pub fn make_turn(&mut self, mov @ Move { col, row }: Move) -> Result<()> {
         // ensure the move is inside the legal moves.
         let idx = (row * 8 + col) as u64;
         if !self.is_legal_move(idx as usize)? {
@@ -423,35 +491,113 @@ impl Game {
         let outflanks = self.board.move_outflanks(self.turn, mov);
         self.board.put_discs(outflanks, self.turn);
 
-        self.turn = !self.turn;
+        self.next_turn();
 
-        self.current_legal_moves = None;
         Ok(())
     }
 
-    #[inline]
-    #[must_use]
-    pub fn white_name(&self) -> &str {
-        if self.white_player.is_empty() {
-            "White"
-        } else {
-            &self.white_player
+    fn next_turn(&mut self) {
+        self.turn = !self.turn;
+        self.current_legal_moves = None;
+    }
+
+    /// Start the game of Othello between the two players
+    pub fn play(&mut self) -> Result<()> {
+        loop {
+            if false {
+                // TODO: remove this when it will no longer be needed
+                break;
+            }
+            self.legal_moves();
+            self.render()?;
+
+            match self.state {
+                State::Playing => {}
+                State::Winned {
+                    winner_color,
+                    winner_score,
+                    loser_score,
+                } => {
+                    let s = &mut *self.stream.borrow_mut();
+                    let winner = match winner_color {
+                        Disc::White => &self.white_player,
+                        Disc::Black => &self.black_player,
+                        Disc::Empty => unreachable!(),
+                    };
+
+                    writeln!(s)?;
+                    writeln!(
+                        s,
+                        "  Congratulation, {}! you win with {}-{}",
+                        winner.force_name(),
+                        winner_score,
+                        loser_score
+                    )?;
+                    break;
+                }
+                State::Draw => {
+                    let s = &mut *self.stream.borrow_mut();
+                    writeln!(s)?;
+                    writeln!(s, "  The game ended in a draw, congrats for both of you.")?;
+                    break;
+                }
+                State::TurnForfeited => {
+                    // the current player can't play so we pass the turn to the
+                    // opponent that can play.
+                    self.next_turn();
+                }
+            }
+
+            let mut previous_err = None;
+            let mov = loop {
+                let res = self.player_think(previous_err);
+
+                if let Ok(mov) = res {
+                    break mov;
+                }
+                // TODO: we may only recall `think` if the error is not an io error.
+                let Err(e) = res else { unreachable!() };
+                previous_err = Some(e);
+            };
+
+            match self.make_turn(mov) {
+                Ok(()) => {}
+                Err(e @ OthebotError::IllegalMove { .. }) => {
+                    let s = &mut *self.stream.borrow_mut();
+                    s.set_color(&style::ERROR)?;
+                    writeln!(s, "{e}")?;
+                    s.reset()?;
+                }
+                Err(e) => return Err(e),
+            };
+        }
+        Ok(())
+    }
+
+    /// Call the method `think` on the current player.
+    fn player_think(&self, previous_err: Option<OthebotError>) -> Result<Move> {
+        match self.turn() {
+            Disc::Black => self.black_player.think(self, previous_err),
+            Disc::White => self.white_player.think(self, previous_err),
+            Disc::Empty => unreachable!(),
         }
     }
 
     #[inline]
     #[must_use]
-    pub fn black_name(&self) -> &str {
-        if self.black_player.is_empty() {
-            "Black"
-        } else {
-            &self.black_player
-        }
+    pub fn white_name(&self) -> Cow<'_, str> {
+        self.white_player.force_name()
     }
 
     #[inline]
     #[must_use]
-    pub fn player_name(&self) -> &str {
+    pub fn black_name(&self) -> Cow<'_, str> {
+        self.black_player.force_name()
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn player_name(&self) -> Cow<'_, str> {
         match self.turn {
             Disc::White => self.white_name(),
             Disc::Black => self.black_name(),
@@ -459,8 +605,19 @@ impl Game {
         }
     }
 
+    #[inline]
+    #[must_use]
+    pub fn maybe_name(&self) -> Option<&String> {
+        match self.turn {
+            Disc::White => self.white_player.name(),
+            Disc::Black => self.black_player.name(),
+            Disc::Empty => unreachable!(),
+        }
+    }
+
     /// Renders the board game to stdout
-    pub fn render(&self, s: &mut StandardStream) -> Result<(), OthebotError> {
+    pub fn render(&self) -> Result<()> {
+        let s: &mut StandardStream = &mut *self.stream.borrow_mut();
         let Some(legal_moves) = self.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };
@@ -472,7 +629,7 @@ impl Game {
 
             // print the scores
             if row == 7 {
-                let (white_score, black_score) = self.board.scores();
+                let (white_score, black_score, _) = self.board.scores();
                 write!(s, "    ")?;
 
                 s.set_color(&style::BLACK_PLAYER)?;
@@ -544,6 +701,36 @@ impl Game {
     /// Compute and store the legal moves of the current player.
     pub fn legal_moves(&mut self) {
         self.current_legal_moves = Some(self.board.legal_moves(self.turn()));
+
+        if let Some(0) = self.current_legal_moves {
+            if self.board.legal_moves(!self.turn()) == 0 {
+                // No one can move this is either a draw or a win.
+                let (white, black, empty) = self.board.scores();
+                if white == black {
+                    // this is a draw.
+                    self.state = State::Draw;
+                } else {
+                    // TODO: here a simple opti is storing `white > black`
+                    let winner_score = white.max(black) + empty;
+                    let loser_score = white.min(black);
+
+                    let winner_color = if white > black {
+                        Disc::White
+                    } else {
+                        Disc::Black
+                    };
+
+                    self.state = State::Winned {
+                        winner_color,
+                        winner_score,
+                        loser_score,
+                    };
+                }
+            } else {
+                // the opponent can play, so we forfeit this turn
+                self.state = State::TurnForfeited;
+            }
+        }
     }
 
     pub fn moves(&self) -> u64 {
