@@ -48,9 +48,9 @@ COMMANDS:
     play, p             Start a new game
     import <notation>   Import a game using the Othello Notation.
     rules               Print the rules of Othello
-    license             Prints the license of the program
-    help, h             Prints this message
-    quit, q             Quit of the program\
+    license             Print the license of the program
+    help, h             Print this message
+    quit, q             Quit the program\
     ",
         env!("CARGO_PKG_NAME"),
         VERSION_AND_GIT_HASH,
