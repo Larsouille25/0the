@@ -20,6 +20,9 @@ pub trait Player: Debug {
     /// Return the name of the player.
     fn name(&self) -> Option<&String>;
 
+    /// Init the player color if the player stores its disc color.
+    fn init_color(&mut self, color: Disc);
+
     /// Return the name of the player and if he have no name, its color.
     fn force_name(&self) -> Cow<'_, str> {
         match self.name() {
@@ -41,7 +44,7 @@ pub struct HumanPlayer {
 }
 
 impl HumanPlayer {
-    pub fn new(color: Disc, name: impl Into<Option<String>>) -> HumanPlayer {
+    pub fn new(name: impl Into<Option<String>>) -> HumanPlayer {
         let name = if let Some(n) = name.into() {
             if n.is_empty() {
                 None
@@ -52,7 +55,10 @@ impl HumanPlayer {
             None
         };
 
-        HumanPlayer { color, name }
+        HumanPlayer {
+            color: Disc::Empty,
+            name,
+        }
     }
 }
 
@@ -88,5 +94,11 @@ impl Player for HumanPlayer {
 
     fn name(&self) -> Option<&String> {
         self.name.as_ref()
+    }
+
+    fn init_color(&mut self, color: Disc) {
+        assert_eq!(self.color, Disc::Empty);
+        assert_ne!(color, Disc::Empty);
+        self.color = color;
     }
 }

@@ -25,8 +25,8 @@ pub fn start_game(notation: Option<&str>) -> Result<(), OthebotError> {
 
     let s = StandardStream::stdout(ColorChoice::Auto);
 
-    let white_player = Box::new(HumanPlayer::new(Disc::White, white));
-    let black_player = Box::new(HumanPlayer::new(Disc::Black, black));
+    let white_player = Box::new(HumanPlayer::new(white));
+    let black_player = Box::new(HumanPlayer::new(black));
     let mut game = if let Some(notation) = notation {
         Game::with_board(Board::from_str(notation)?, white_player, black_player, s)
     } else {

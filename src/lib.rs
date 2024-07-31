@@ -445,14 +445,12 @@ impl Game {
 
     pub fn with_board(
         board: Board,
-        white_player: Box<dyn Player>,
-        black_player: Box<dyn Player>,
+        mut white_player: Box<dyn Player>,
+        mut black_player: Box<dyn Player>,
         stream: StandardStream,
     ) -> Game {
-        // TODO: found a better solution for this issue with the colors, don't
-        // let the user have the choice of the color
-        assert_eq!(white_player.color(), Disc::White);
-        assert_eq!(black_player.color(), Disc::Black);
+        white_player.init_color(Disc::White);
+        black_player.init_color(Disc::Black);
 
         Game {
             board,
