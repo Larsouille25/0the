@@ -8,4 +8,5 @@ authors = ["Thibault Vincent <th1bault.vincent@proton.me>"]
 
 [dependencies]
 lazy_static = "1.5.0"
+rand = "0.8.5"
 termcolor = "1.4.1"

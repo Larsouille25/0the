@@ -364,6 +364,13 @@ impl Move {
     pub fn into_idx(self) -> usize {
         self.row as usize * 8 + self.col as usize
     }
+
+    pub fn from_idx(idx: u8) -> Move {
+        Move {
+            row: idx / 8,
+            col: idx % 8,
+        }
+    }
 }
 
 /// Converts an algebric notation like `a1`, `g8`, `b7` etc to `(0, 0)`,
@@ -384,7 +391,7 @@ fn algebric2xy(pos: &str) -> Result<(u8, u8)> {
     Ok((col - b'a', row - b'1'))
 }
 
-pub fn bitfield_to_indexes(bitfield: u64) -> Vec<usize> {
+pub fn bitfield_to_indexes(bitfield: u64) -> Vec<u8> {
     let mut positions = Vec::new();
     for i in 0..64 {
         if (bitfield & (1 << i)) != 0 {
@@ -507,7 +514,9 @@ impl Game {
                 break;
             }
             self.legal_moves();
-            self.render()?;
+            if self.current_player().is_human() {
+                self.render(None)?;
+            }
 
             match self.state {
                 State::Playing => {}
@@ -526,8 +535,9 @@ impl Game {
                     writeln!(s)?;
                     writeln!(
                         s,
-                        "  Congratulation, {}! you win with {}-{}",
+                        "  Congratulation, {} ({})! you win with {}-{}",
                         winner.force_name(),
+                        winner_color,
                         winner_score,
                         loser_score
                     )?;
@@ -542,7 +552,20 @@ impl Game {
                 State::TurnForfeited => {
                     // the current player can't play so we pass the turn to the
                     // opponent that can play.
+                    {
+                        let s = &mut *self.stream.borrow_mut();
+                        writeln!(
+                            s,
+                            "The turn of {} has been forfeited, he cannot play.",
+                            self.turn()
+                        )?;
+                    }
                     self.next_turn();
+
+                    self.legal_moves();
+                    if self.current_player().is_human() {
+                        self.render(None)?;
+                    }
                 }
             }
 
@@ -581,6 +604,14 @@ impl Game {
         }
     }
 
+    pub fn current_player(&self) -> &Box<dyn Player> {
+        match self.turn() {
+            Disc::White => &self.white_player,
+            Disc::Black => &self.black_player,
+            Disc::Empty => unreachable!(),
+        }
+    }
+
     #[inline]
     #[must_use]
     pub fn white_name(&self) -> Cow<'_, str> {
@@ -605,7 +636,7 @@ impl Game {
 
     #[inline]
     #[must_use]
-    pub fn maybe_name(&self) -> Option<&String> {
+    pub fn maybe_name(&self) -> Option<Cow<'static, str>> {
         match self.turn {
             Disc::White => self.white_player.name(),
             Disc::Black => self.black_player.name(),
@@ -614,8 +645,9 @@ impl Game {
     }
 
     /// Renders the board game to stdout
-    pub fn render(&self) -> Result<()> {
-        let s: &mut StandardStream = &mut *self.stream.borrow_mut();
+    pub fn render(&self, s: Option<&mut StandardStream>) -> Result<()> {
+        let mut _s = self.stream.borrow_mut();
+        let s: &mut StandardStream = s.unwrap_or(&mut *_s);
         let Some(legal_moves) = self.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };

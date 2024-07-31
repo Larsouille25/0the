@@ -2,9 +2,10 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::{borrow::Cow, io};
 
+use rand::seq::IteratorRandom;
 use termcolor::WriteColor;
 
-use crate::{style, Disc, Game, Move, OthebotError, Result};
+use crate::{bitfield_to_indexes, style, Disc, Game, Move, OthebotError, Result};
 
 /// A player of the Othello Game, it may be Human, a bot like MinMax, AlphaBeta
 /// pruning, Monte Carlo Tree Search, a fancy powerful AI..
@@ -18,7 +19,7 @@ pub trait Player: Debug {
     fn think(&self, game: &Game, err: Option<OthebotError>) -> Result<Move>;
 
     /// Return the name of the player.
-    fn name(&self) -> Option<&String>;
+    fn name(&self) -> Option<Cow<'static, str>>;
 
     /// Init the player color if the player stores its disc color.
     fn init_color(&mut self, color: Disc);
@@ -34,6 +35,12 @@ pub trait Player: Debug {
             }
             .into(),
         }
+    }
+
+    /// Is the player, human, used to know when using the CLI whetever to print
+    /// the board or not
+    fn is_human(&self) -> bool {
+        false
     }
 }
 
@@ -92,8 +99,55 @@ impl Player for HumanPlayer {
         Move::from_algebric(&mov_str)
     }
 
-    fn name(&self) -> Option<&String> {
-        self.name.as_ref()
+    fn name(&self) -> Option<Cow<'static, str>> {
+        self.name.clone().map(|nam| Cow::Owned(nam.into()))
+    }
+
+    fn init_color(&mut self, color: Disc) {
+        assert_eq!(self.color, Disc::Empty);
+        assert_ne!(color, Disc::Empty);
+        self.color = color;
+    }
+
+    fn is_human(&self) -> bool {
+        true
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RandomPlayer {
+    color: Disc,
+}
+
+impl Default for RandomPlayer {
+    fn default() -> Self {
+        RandomPlayer { color: Disc::Empty }
+    }
+}
+
+impl Player for RandomPlayer {
+    fn color(&self) -> Disc {
+        self.color
+    }
+
+    fn think(&self, game: &Game, _: Option<OthebotError>) -> Result<Move> {
+        let Some(legal_moves) = game.current_legal_moves else {
+            return Err(OthebotError::LegalMovesNotComputed);
+        };
+
+        let legal_moves = bitfield_to_indexes(legal_moves);
+
+        let mut rand = rand::thread_rng();
+
+        // it's safe to unwrap, it only return `None` if the vector is empty
+        // and we know for a fact he is not because we can play
+        Ok(Move::from_idx(
+            *legal_moves.iter().choose(&mut rand).unwrap(),
+        ))
+    }
+
+    fn name(&self) -> Option<Cow<'static, str>> {
+        Some(Cow::Borrowed("Random Bot"))
     }
 
     fn init_color(&mut self, color: Disc) {

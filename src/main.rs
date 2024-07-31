@@ -5,28 +5,55 @@ use std::{
 };
 
 use othebot::{
-    player::HumanPlayer, Board, Disc, Game, OthebotError, LICENSE, OTHELLO_RULES,
-    VERSION_AND_GIT_HASH,
+    player::{HumanPlayer, Player, RandomPlayer},
+    style, Board, Disc, Game, OthebotError, LICENSE, OTHELLO_RULES, VERSION_AND_GIT_HASH,
 };
-use termcolor::{ColorChoice, StandardStream};
+use termcolor::{ColorChoice, StandardStream, WriteColor};
 
+fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, OthebotError> {
+    let mut buf = String::new();
+    write!(s, "{color} player's type (1): ")?;
+    s.flush()?;
+    io::stdin().read_line(&mut buf)?;
+    buf.pop();
+    match buf.as_str() {
+        "" | "1" => {
+            // human player
+            buf.clear();
+            write!(s, "                   name: ")?;
+            s.flush()?;
+            io::stdin().read_line(&mut buf)?;
+            buf.pop();
+            Ok(Box::new(HumanPlayer::new(buf)))
+        }
+        "2" => {
+            // random bot player
+            Ok(Box::new(RandomPlayer::default()))
+        }
+        _ => {
+            s.set_color(&style::ERROR)?;
+            writeln!(s, "Choose one of the available player types.")?;
+            s.reset()?;
+            s.flush()?;
+            todo!("Make this an error of OthebotError")
+        }
+    }
+}
 pub fn start_game(notation: Option<&str>) -> Result<(), OthebotError> {
-    let mut black = String::new();
-    print!("Black player's name: ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut black)?;
-    black.pop();
+    let mut s = StandardStream::stdout(ColorChoice::Auto);
 
-    let mut white = String::new();
-    print!("White player's name: ");
-    io::stdout().flush()?;
-    io::stdin().read_line(&mut white)?;
-    white.pop();
+    writeln!(
+        s,
+        "\
+Available player types:
+ 1. Human
+ 2. Random Bot
+"
+    )?;
 
-    let s = StandardStream::stdout(ColorChoice::Auto);
+    let black_player = player_init(&mut s, Disc::Black)?;
+    let white_player = player_init(&mut s, Disc::White)?;
 
-    let white_player = Box::new(HumanPlayer::new(white));
-    let black_player = Box::new(HumanPlayer::new(black));
     let mut game = if let Some(notation) = notation {
         Game::with_board(Board::from_str(notation)?, white_player, black_player, s)
     } else {
