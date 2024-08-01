@@ -41,7 +41,6 @@ fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, O
 }
 pub fn start_game(notation: Option<&str>) -> Result<(), OthebotError> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
-
     writeln!(
         s,
         "\
@@ -65,7 +64,9 @@ Available player types:
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    println!("Welcome, in Othebot!\n");
+    let mut s = StandardStream::stdout(ColorChoice::Auto);
+
+    writeln!(s, "Welcome, in Othebot!\n")?;
     let help = format!(
         "\
 {} {}
@@ -86,7 +87,7 @@ COMMANDS:
 
     let mut cmd = String::new();
     loop {
-        print!("Command (h for help): ");
+        write!(s, "Command (h for help): ")?;
         io::stdout().flush()?;
         cmd.clear();
         io::stdin().read_line(&mut cmd)?;
@@ -96,16 +97,36 @@ COMMANDS:
         let vec = cmd.split_whitespace().collect::<Vec<_>>();
         let args = vec.as_slice();
 
-        match args {
-            // TODO: don't return here when calling `start_game`
-            ["play" | "p"] => start_game(None)?,
-            ["import", notation] => start_game(Some(notation))?,
-            ["rules"] => println!("{}", OTHELLO_RULES),
-            ["license"] => println!("{}", LICENSE),
-            ["help" | "h"] => println!("{help}"),
+        let res = match args {
+            ["play" | "p"] => start_game(None),
+            ["import", notation] => start_game(Some(notation)),
+            ["rules"] => {
+                writeln!(s, "{}", OTHELLO_RULES)?;
+                Ok(())
+            }
+            ["license"] => {
+                writeln!(s, "{}", LICENSE)?;
+                Ok(())
+            }
+            ["help" | "h"] => {
+                writeln!(s, "{help}")?;
+                Ok(())
+            }
             ["quit" | "q"] => break,
-            unknown => println!(r#"Unknown command {unknown:?}, type "help" for help."#),
+            unknown => {
+                writeln!(s, r#"Unknown command {unknown:?}, type "help" for help."#)?;
+                Ok(())
+            }
+        };
+        match res {
+            Ok(()) => {}
+            Err(e) => {
+                s.set_color(&style::ERROR)?;
+                writeln!(s, "{e}")?;
+                s.reset()?;
+            }
         }
+
         println!();
     }
 
