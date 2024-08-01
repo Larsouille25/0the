@@ -27,7 +27,7 @@ pub trait Player: Debug {
     /// Return the name of the player and if he have no name, its color.
     fn force_name(&self) -> Cow<'_, str> {
         match self.name() {
-            Some(name) => name.into(),
+            Some(name) => name,
             None => match self.color() {
                 Disc::White => "White",
                 Disc::Black => "Black",
@@ -52,15 +52,7 @@ pub struct HumanPlayer {
 
 impl HumanPlayer {
     pub fn new(name: impl Into<Option<String>>) -> HumanPlayer {
-        let name = if let Some(n) = name.into() {
-            if n.is_empty() {
-                None
-            } else {
-                Some(n)
-            }
-        } else {
-            None
-        };
+        let name = name.into().filter(|n| !n.is_empty());
 
         HumanPlayer {
             color: Disc::Empty,
@@ -100,7 +92,7 @@ impl Player for HumanPlayer {
     }
 
     fn name(&self) -> Option<Cow<'static, str>> {
-        self.name.clone().map(|nam| Cow::Owned(nam.into()))
+        self.name.clone().map(Cow::Owned)
     }
 
     fn init_color(&mut self, color: Disc) {

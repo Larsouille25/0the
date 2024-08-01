@@ -6,7 +6,8 @@ use std::{
 
 use othebot::{
     player::{HumanPlayer, Player, RandomPlayer},
-    style, Board, Disc, Game, OthebotError, LICENSE, OTHELLO_RULES, VERSION_AND_GIT_HASH,
+    style, Board, Disc, Game, GameSettings, OthebotError, LICENSE, OTHELLO_RULES,
+    VERSION_AND_GIT_HASH,
 };
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
@@ -15,6 +16,7 @@ fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, O
     write!(s, "{color} player's type (1): ")?;
     s.flush()?;
     io::stdin().read_line(&mut buf)?;
+    // pop the newline character
     buf.pop();
     match buf.as_str() {
         "" | "1" => {
@@ -30,16 +32,11 @@ fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, O
             // random bot player
             Ok(Box::new(RandomPlayer::default()))
         }
-        _ => {
-            s.set_color(&style::ERROR)?;
-            writeln!(s, "Choose one of the available player types.")?;
-            s.reset()?;
-            s.flush()?;
-            todo!("Make this an error of OthebotError")
-        }
+        _ => Err(OthebotError::InvalidPlayerType),
     }
 }
-pub fn start_game(notation: Option<&str>) -> Result<(), OthebotError> {
+
+pub fn start_game(notation: Option<&str>, settings: GameSettings) -> Result<(), OthebotError> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
     writeln!(
         s,
@@ -54,11 +51,67 @@ Available player types:
     let white_player = player_init(&mut s, Disc::White)?;
 
     let mut game = if let Some(notation) = notation {
-        Game::with_board(Board::from_str(notation)?, white_player, black_player, s)
+        Game::with_board(
+            Board::from_str(notation)?,
+            white_player,
+            black_player,
+            s,
+            settings,
+        )
     } else {
-        Game::new(white_player, black_player, s)
+        Game::new(white_player, black_player, s, settings)
     };
     game.play()?;
+
+    Ok(())
+}
+
+pub fn yes_no(yes: bool) -> &'static str {
+    if yes {
+        "Yes"
+    } else {
+        "No"
+    }
+}
+
+pub fn settings_menu(
+    s: &mut StandardStream,
+    settings: &mut GameSettings,
+) -> Result<(), OthebotError> {
+    write!(
+        s,
+        "\
+Settings:
+ 1. Show legal moves: {:3}         Show the dots on the board indicating the
+                                  legals moves of the player.
+
+Choose a settings to change or type `q`: \
+",
+        yes_no(settings.show_legal_moves),
+    )?;
+
+    let mut buf = String::new();
+    s.flush()?;
+    io::stdin().read_line(&mut buf)?;
+    // pop the newline character
+    buf.pop();
+    match buf.as_str() {
+        "1" => {
+            buf.clear();
+            write!(s, "`Yes` or `No`? ")?;
+            s.flush()?;
+            io::stdin().read_line(&mut buf)?;
+            // pop the newline character
+            buf.pop();
+
+            settings.show_legal_moves = match buf.to_lowercase().trim() {
+                "yes" => true,
+                "no" => false,
+                _ => return Ok(()),
+            };
+        }
+        _ => return Ok(()),
+    }
 
     Ok(())
 }
@@ -75,6 +128,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 COMMANDS:
     play, p             Start a new game
     import <notation>   Import a game using the Othello Notation.
+    settings            Change settings of Games
     rules               Print the rules of Othello
     license             Print the license of the program
     help, h             Print this message
@@ -84,6 +138,8 @@ COMMANDS:
         VERSION_AND_GIT_HASH,
         env!("CARGO_PKG_AUTHORS"),
     );
+
+    let mut settings = GameSettings::default();
 
     let mut cmd = String::new();
     loop {
@@ -98,8 +154,9 @@ COMMANDS:
         let args = vec.as_slice();
 
         let res = match args {
-            ["play" | "p"] => start_game(None),
-            ["import", notation] => start_game(Some(notation)),
+            ["play" | "p"] => start_game(None, settings.clone()),
+            ["import", notation] => start_game(Some(notation), settings.clone()),
+            ["settings"] => settings_menu(&mut s, &mut settings),
             ["rules"] => {
                 writeln!(s, "{}", OTHELLO_RULES)?;
                 Ok(())

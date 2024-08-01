@@ -33,6 +33,7 @@ pub enum OthebotError {
     IoError(io::Error),
     InvalidLenghtOfNotation,
     InvalidCharInNotation { ch: char },
+    InvalidPlayerType,
 }
 
 impl Error for OthebotError {}
@@ -46,6 +47,7 @@ impl Display for OthebotError {
             OthebotError::IoError(e) => write!(f, "IO ERROR: {e}"),
             OthebotError::InvalidLenghtOfNotation => write!(f, "the Othello Notation must be 64 characters long"),
             OthebotError::InvalidCharInNotation { ch } => write!(f, "invalid character {ch:?} in Othello Notation"),
+            OthebotError::InvalidPlayerType => write!(f, "Invalid player type."),
         }
     }
 }
@@ -86,6 +88,17 @@ impl Display for Disc {
         }
     }
 }
+
+static DIRECTIONS: [(i32, i32); 8] = [
+    (-1, -1), // RIGHT UP
+    (0, -1),  // UP
+    (1, -1),  // LEFT-UP
+    (-1, 0),  // RIGHT
+    (1, 0),   // LEFT
+    (-1, 1),  // LEFT-DOWN
+    (0, 1),   // DOWN
+    (1, 1),   // RIGHT-DOWN
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Board {
@@ -176,17 +189,6 @@ impl Board {
             panic!("The player should not be an empty disc.")
         }
 
-        let directions: [(i32, i32); 8] = [
-            (-1, -1), // RIGHT UP
-            (0, -1),  // UP
-            (1, -1),  // LEFT-UP
-            (-1, 0),  // RIGHT
-            (1, 0),   // LEFT
-            (-1, 1),  // LEFT-DOWN
-            (0, 1),   // DOWN
-            (1, 1),   // RIGHT-DOWN
-        ];
-
         for y in 0..8 {
             for x in 0..8 {
                 let idx = y * 8 + x;
@@ -196,7 +198,7 @@ impl Board {
                     continue;
                 }
 
-                for (dx, dy) in directions {
+                for (dx, dy) in DIRECTIONS {
                     // coordinates of next disc in direction
                     let mut nx = x as i32 + dx;
                     let mut ny = y as i32 + dy;
@@ -250,20 +252,7 @@ impl Board {
             panic!("The player should not be an empty disc.")
         }
 
-        // TODO: make this kinda global because in `legal_moves` we have the
-        // same slice.
-        let directions: [(i32, i32); 8] = [
-            (-1, -1), // RIGHT UP
-            (0, -1),  // UP
-            (1, -1),  // LEFT-UP
-            (-1, 0),  // RIGHT
-            (1, 0),   // LEFT
-            (-1, 1),  // LEFT-DOWN
-            (0, 1),   // DOWN
-            (1, 1),   // RIGHT-DOWN
-        ];
-
-        for (dx, dy) in directions {
+        for (dx, dy) in DIRECTIONS {
             let mut nx = x as i32 + dx;
             let mut ny = y as i32 + dy;
             // this is a bitfield that contains opponent's discs that could be
@@ -400,6 +389,20 @@ pub fn bitfield_to_indexes(bitfield: u64) -> Vec<u8> {
     positions
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameSettings {
+    /// Whetever we show the dots on the board or not
+    pub show_legal_moves: bool,
+}
+
+impl Default for GameSettings {
+    fn default() -> Self {
+        GameSettings {
+            show_legal_moves: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum State {
     /// The game is currently being played.
@@ -419,6 +422,7 @@ pub enum State {
     TurnForfeited,
 }
 
+// TODO: make an option to disable all writes and replace with events.
 #[derive(Debug)]
 pub struct Game {
     board: Board,
@@ -438,6 +442,8 @@ pub struct Game {
     stream: RefCell<StandardStream>,
     /// The state of the game
     state: State,
+    /// Game settings
+    pub settings: GameSettings,
 }
 
 impl Game {
@@ -445,8 +451,9 @@ impl Game {
         white_player: Box<dyn Player>,
         black_player: Box<dyn Player>,
         stream: StandardStream,
+        settings: GameSettings,
     ) -> Game {
-        Game::with_board(Board::new(), white_player, black_player, stream)
+        Game::with_board(Board::new(), white_player, black_player, stream, settings)
     }
 
     pub fn with_board(
@@ -454,6 +461,7 @@ impl Game {
         mut white_player: Box<dyn Player>,
         mut black_player: Box<dyn Player>,
         stream: StandardStream,
+        settings: GameSettings,
     ) -> Game {
         white_player.init_color(Disc::White);
         black_player.init_color(Disc::Black);
@@ -466,6 +474,7 @@ impl Game {
             current_legal_moves: None,
             stream: RefCell::new(stream),
             state: State::Playing,
+            settings,
         }
     }
 
@@ -602,10 +611,10 @@ impl Game {
         }
     }
 
-    pub fn current_player(&self) -> &Box<dyn Player> {
+    pub fn current_player(&self) -> &dyn Player {
         match self.turn() {
-            Disc::White => &self.white_player,
-            Disc::Black => &self.black_player,
+            Disc::White => self.white_player.as_ref(),
+            Disc::Black => self.black_player.as_ref(),
             Disc::Empty => unreachable!(),
         }
     }
@@ -691,7 +700,7 @@ impl Game {
                         s.set_color(&style::BLACK_PLAYER)?;
                         write!(s, " B ")?;
                     }
-                    Disc::Empty if is_legal_move => {
+                    Disc::Empty if is_legal_move && self.settings.show_legal_moves => {
                         s.set_color(&style::LEGAL_MOVE)?;
                         write!(s, " • ")?;
                     }
