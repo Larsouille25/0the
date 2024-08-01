@@ -328,7 +328,6 @@ impl FromStr for Board {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: write tests for this function
         if s.len() != 64 {
-            dbg!(s.len());
             return Err(OthebotError::InvalidLenghtOfNotation);
         }
         let mut board = [Disc::Empty; 64];
@@ -502,17 +501,20 @@ impl Game {
     }
 
     fn next_turn(&mut self) {
+        // Change the turn to the opponent
         self.turn = !self.turn;
+        // Reset the current legal moves to `None`, just a simple safety used
+        // not to confuse between Black's and White's legal moves
         self.current_legal_moves = None;
+        // Set the state to playing, the player before could of had a State of
+        // `TurnForfeited` and if the other player can play it must not forfeit
+        // is turn
+        self.state = State::Playing;
     }
 
     /// Start the game of Othello between the two players
     pub fn play(&mut self) -> Result<()> {
         loop {
-            if false {
-                // TODO: remove this when it will no longer be needed
-                break;
-            }
             self.legal_moves();
             if self.current_player().is_human() {
                 self.render(None)?;
@@ -561,11 +563,7 @@ impl Game {
                         )?;
                     }
                     self.next_turn();
-
-                    self.legal_moves();
-                    if self.current_player().is_human() {
-                        self.render(None)?;
-                    }
+                    continue;
                 }
             }
 
@@ -729,40 +727,41 @@ impl Game {
     }
 
     /// Compute and store the legal moves of the current player.
-    pub fn legal_moves(&mut self) {
+    fn legal_moves(&mut self) {
         self.current_legal_moves = Some(self.board.legal_moves(self.turn()));
 
         if let Some(0) = self.current_legal_moves {
-            if self.board.legal_moves(!self.turn()) == 0 {
-                // No one can move this is either a draw or a win.
-                let (white, black, empty) = self.board.scores();
-                if white == black {
-                    // this is a draw.
-                    self.state = State::Draw;
-                } else {
-                    // TODO: here a simple opti is storing `white > black`
-                    let winner_score = white.max(black) + empty;
-                    let loser_score = white.min(black);
-
-                    let winner_color = if white > black {
-                        Disc::White
-                    } else {
-                        Disc::Black
-                    };
-
-                    self.state = State::Winned {
-                        winner_color,
-                        winner_score,
-                        loser_score,
-                    };
-                }
-            } else {
+            if self.board.legal_moves(!self.turn()) != 0 {
                 // the opponent can play, so we forfeit this turn
                 self.state = State::TurnForfeited;
+                return;
             }
+            // No one can move this is either a draw or a win.
+            let (white, black, empty) = self.board.scores();
+            if white == black {
+                // this is a draw.
+                self.state = State::Draw;
+                return;
+            }
+            // TODO: here a simple opti is storing `white > black`
+            let winner_score = white.max(black) + empty;
+            let loser_score = white.min(black);
+
+            let winner_color = if white > black {
+                Disc::White
+            } else {
+                Disc::Black
+            };
+
+            self.state = State::Winned {
+                winner_color,
+                winner_score,
+                loser_score,
+            };
         }
     }
 
+    #[inline]
     pub fn moves(&self) -> u64 {
         self.current_legal_moves.unwrap()
     }

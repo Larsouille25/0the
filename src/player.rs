@@ -130,7 +130,10 @@ impl Player for RandomPlayer {
         self.color
     }
 
-    fn think(&self, game: &Game, _: Option<OthebotError>) -> Result<Move> {
+    fn think(&self, game: &Game, err: Option<OthebotError>) -> Result<Move> {
+        // ensure there is no error(s).
+        assert!(err.is_none());
+
         let Some(legal_moves) = game.current_legal_moves else {
             return Err(OthebotError::LegalMovesNotComputed);
         };
