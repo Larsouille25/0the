@@ -26,6 +26,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "giulio"
+version = "0.0.0"
+dependencies = [
+ "lazy_static",
+ "rand",
+ "termcolor",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -36,15 +45,6 @@ name = "libc"
 version = "0.2.155"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
-
-[[package]]
-name = "othebot"
-version = "0.0.0"
-dependencies = [
- "lazy_static",
- "rand",
- "termcolor",
-]
 
 [[package]]
 name = "ppv-lite86"

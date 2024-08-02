@@ -4,14 +4,14 @@ use std::{
     str::FromStr,
 };
 
-use othebot::{
+use giulio::{
     player::{HumanPlayer, Player, RandomPlayer},
-    style, Board, Disc, Game, GameSettings, OthebotError, LICENSE, OTHELLO_RULES,
+    style, Board, Disc, Game, GameSettings, OthelloError, LICENSE, OTHELLO_RULES,
     VERSION_AND_GIT_HASH,
 };
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
-fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, OthebotError> {
+fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, OthelloError> {
     let mut buf = String::new();
     write!(s, "{color} player's type (1): ")?;
     s.flush()?;
@@ -32,11 +32,11 @@ fn player_init(s: &mut StandardStream, color: Disc) -> Result<Box<dyn Player>, O
             // random bot player
             Ok(Box::new(RandomPlayer::default()))
         }
-        _ => Err(OthebotError::InvalidPlayerType),
+        _ => Err(OthelloError::InvalidPlayerType),
     }
 }
 
-pub fn start_game(notation: Option<&str>, settings: GameSettings) -> Result<(), OthebotError> {
+pub fn start_game(notation: Option<&str>, settings: GameSettings) -> Result<(), OthelloError> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
     writeln!(
         s,
@@ -77,7 +77,7 @@ pub fn yes_no(yes: bool) -> &'static str {
 pub fn settings_menu(
     s: &mut StandardStream,
     settings: &mut GameSettings,
-) -> Result<(), OthebotError> {
+) -> Result<(), OthelloError> {
     write!(
         s,
         "\
@@ -119,7 +119,7 @@ Choose a settings to change or type `q`: \
 fn main() -> Result<(), Box<dyn Error>> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
 
-    writeln!(s, "Welcome, in Othebot!\n")?;
+    writeln!(s, "Welcome, in Giulio CLI!\n")?;
     let help = format!(
         "\
 {} {}

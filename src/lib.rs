@@ -23,10 +23,10 @@ pub const LICENSE: &str = include_str!("../LICENSE");
 /// [wof]: https://www.worldothello.org
 pub const OTHELLO_RULES: &str = include_str!("../OTHELLO_RULES");
 
-pub(crate) type Result<T, E = OthebotError> = std::result::Result<T, E>;
+pub(crate) type Result<T, E = OthelloError> = std::result::Result<T, E>;
 
 #[derive(Debug)]
-pub enum OthebotError {
+pub enum OthelloError {
     InvalidAlgebric(String),
     IllegalMove { row: u8, col: u8 },
     LegalMovesNotComputed,
@@ -36,25 +36,25 @@ pub enum OthebotError {
     InvalidPlayerType,
 }
 
-impl Error for OthebotError {}
+impl Error for OthelloError {}
 
-impl Display for OthebotError {
+impl Display for OthelloError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            OthebotError::InvalidAlgebric(notation) => write!(f, "invalid algebric notation {notation:?}, valid e.g: `a5`"),
-            OthebotError::IllegalMove{ row, col} => write!(f, "illegal move (row: {row}, col: {col}), you can't put your disc here"),
-            OthebotError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves."),
-            OthebotError::IoError(e) => write!(f, "IO ERROR: {e}"),
-            OthebotError::InvalidLenghtOfNotation => write!(f, "the Othello Notation must be 64 characters long"),
-            OthebotError::InvalidCharInNotation { ch } => write!(f, "invalid character {ch:?} in Othello Notation"),
-            OthebotError::InvalidPlayerType => write!(f, "Invalid player type."),
+            OthelloError::InvalidAlgebric(notation) => write!(f, "invalid algebric notation {notation:?}, valid e.g: `a5`"),
+            OthelloError::IllegalMove{ row, col} => write!(f, "illegal move (row: {row}, col: {col}), you can't put your disc here"),
+            OthelloError::LegalMovesNotComputed => write!(f, "INTERNAL ERROR: legal moves were not computed before calling a function that depends on legal moves."),
+            OthelloError::IoError(e) => write!(f, "IO ERROR: {e}"),
+            OthelloError::InvalidLenghtOfNotation => write!(f, "the Othello Notation must be 64 characters long"),
+            OthelloError::InvalidCharInNotation { ch } => write!(f, "invalid character {ch:?} in Othello Notation"),
+            OthelloError::InvalidPlayerType => write!(f, "Invalid player type."),
         }
     }
 }
 
-impl From<io::Error> for OthebotError {
+impl From<io::Error> for OthelloError {
     fn from(value: io::Error) -> Self {
-        OthebotError::IoError(value)
+        OthelloError::IoError(value)
     }
 }
 
@@ -303,7 +303,7 @@ impl Default for Board {
 }
 
 impl FromStr for Board {
-    type Err = OthebotError;
+    type Err = OthelloError;
 
     /// The board can be constructed from a string, [the format is common to
     /// othello programs.][this-articles]
@@ -317,7 +317,7 @@ impl FromStr for Board {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // TODO: write tests for this function
         if s.len() != 64 {
-            return Err(OthebotError::InvalidLenghtOfNotation);
+            return Err(OthelloError::InvalidLenghtOfNotation);
         }
         let mut board = [Disc::Empty; 64];
         for (i, c) in s.char_indices() {
@@ -328,7 +328,7 @@ impl FromStr for Board {
                 'O' => board[i] = Disc::White,
                 'X' => board[i] = Disc::Black,
                 ch => {
-                    return Err(OthebotError::InvalidCharInNotation { ch });
+                    return Err(OthelloError::InvalidCharInNotation { ch });
                 }
             }
         }
@@ -365,7 +365,7 @@ impl Move {
 /// `(6, 7)`, `(1, 6)`.
 fn algebric2xy(pos: &str) -> Result<(u8, u8)> {
     if pos.len() != 2 {
-        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
+        return Err(OthelloError::InvalidAlgebric(pos.to_string()));
     }
 
     let mut it = pos.chars();
@@ -373,7 +373,7 @@ fn algebric2xy(pos: &str) -> Result<(u8, u8)> {
     let row = it.next().unwrap() as u8;
 
     if !(b'a'..=b'h').contains(&col) || !(b'1'..=b'8').contains(&row) {
-        return Err(OthebotError::InvalidAlgebric(pos.to_string()));
+        return Err(OthelloError::InvalidAlgebric(pos.to_string()));
     }
 
     Ok((col - b'a', row - b'1'))
@@ -489,7 +489,7 @@ impl Game {
 
     pub fn is_legal_move(&self, index: usize) -> Result<bool> {
         let Some(moves) = self.current_legal_moves else {
-            return Err(OthebotError::LegalMovesNotComputed);
+            return Err(OthelloError::LegalMovesNotComputed);
         };
         Ok(Self::is_legal(moves, index))
     }
@@ -498,7 +498,7 @@ impl Game {
         // ensure the move is inside the legal moves.
         let idx = (row * 8 + col) as u64;
         if !self.is_legal_move(idx as usize)? {
-            return Err(OthebotError::IllegalMove { row, col });
+            return Err(OthelloError::IllegalMove { row, col });
         }
         self.board.change_disc(mov, self.turn);
         let outflanks = self.board.move_outflanks(self.turn, mov);
@@ -590,7 +590,7 @@ impl Game {
 
             match self.make_turn(mov) {
                 Ok(()) => {}
-                Err(e @ OthebotError::IllegalMove { .. }) => {
+                Err(e @ OthelloError::IllegalMove { .. }) => {
                     let s = &mut *self.stream.borrow_mut();
                     s.set_color(&style::ERROR)?;
                     writeln!(s, "{e}")?;
@@ -603,7 +603,7 @@ impl Game {
     }
 
     /// Call the method `think` on the current player.
-    fn player_think(&self, previous_err: Option<OthebotError>) -> Result<Move> {
+    fn player_think(&self, previous_err: Option<OthelloError>) -> Result<Move> {
         match self.turn() {
             Disc::Black => self.black_player.think(self, previous_err),
             Disc::White => self.white_player.think(self, previous_err),
@@ -656,7 +656,7 @@ impl Game {
         let mut _s = self.stream.borrow_mut();
         let s: &mut StandardStream = s.unwrap_or(&mut *_s);
         let Some(legal_moves) = self.current_legal_moves else {
-            return Err(OthebotError::LegalMovesNotComputed);
+            return Err(OthelloError::LegalMovesNotComputed);
         };
 
         for row in 0..8 {

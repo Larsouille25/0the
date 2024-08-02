@@ -5,7 +5,7 @@ use std::{borrow::Cow, io};
 use rand::seq::IteratorRandom;
 use termcolor::WriteColor;
 
-use crate::{bitfield_to_indexes, style, Disc, Game, Move, OthebotError, Result};
+use crate::{bitfield_to_indexes, style, Disc, Game, Move, OthelloError, Result};
 
 /// A player of the Othello Game, it may be Human, a bot like MinMax, AlphaBeta
 /// pruning, Monte Carlo Tree Search, a fancy powerful AI..
@@ -16,7 +16,7 @@ pub trait Player: Debug {
     /// This function is called when it is the turn of this player, or when the
     /// previous call to this function resulted in a error (`err` arg) from the
     /// player, like illegal move etc..
-    fn think(&self, game: &Game, err: Option<OthebotError>) -> Result<Move>;
+    fn think(&self, game: &Game, err: Option<OthelloError>) -> Result<Move>;
 
     /// Return the name of the player.
     fn name(&self) -> Option<Cow<'static, str>>;
@@ -66,7 +66,7 @@ impl Player for HumanPlayer {
         self.color
     }
 
-    fn think(&self, game: &Game, err: Option<OthebotError>) -> Result<Move> {
+    fn think(&self, game: &Game, err: Option<OthelloError>) -> Result<Move> {
         let s = &mut *game.stream.borrow_mut();
 
         if let Some(err) = err {
@@ -122,12 +122,12 @@ impl Player for RandomPlayer {
         self.color
     }
 
-    fn think(&self, game: &Game, err: Option<OthebotError>) -> Result<Move> {
+    fn think(&self, game: &Game, err: Option<OthelloError>) -> Result<Move> {
         // ensure there is no error(s).
         assert!(err.is_none());
 
         let Some(legal_moves) = game.current_legal_moves else {
-            return Err(OthebotError::LegalMovesNotComputed);
+            return Err(OthelloError::LegalMovesNotComputed);
         };
 
         let legal_moves = bitfield_to_indexes(legal_moves);

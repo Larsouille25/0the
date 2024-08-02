@@ -1,3 +1,4 @@
-# Othebot - Othello client
+# `giulio` - othello in Rust
 
-Othebot is a othello client written in Rust.
+Guilio is an othello library written in Rust with its CLI to play games against
+some AI.
