@@ -1,15 +1,22 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
+    env,
     error::Error,
     fmt::{self, Display},
+    fs::{self, File},
     io::{self, Write},
     ops::Not,
+    path::PathBuf,
     str::FromStr,
 };
 
-use player::Player;
+use chrono::Local;
+use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use termcolor::{StandardStream, WriteColor};
+
+use player::{Player, PlayerType};
 
 pub mod player;
 pub mod style;
@@ -25,7 +32,27 @@ pub const OTHELLO_RULES: &str = include_str!("../OTHELLO_RULES");
 
 pub(crate) type Result<T, E = OthelloError> = std::result::Result<T, E>;
 
+lazy_static! {
+    /// The directory where the game saves are stored.
+    pub static ref DEFAULT_GAME_SAVES_DIR: Option<PathBuf> = {
+        #[cfg(unix)]
+        {
+            // TODO: read the XDG_DATA_HOME env instead
+            let mut path = PathBuf::from(env::var("HOME").expect("The environment variable $HOME is undefined."));
+            path.push(".local/share/");
+            // the directory where the game saves are stored
+            path.push(env!("CARGO_PKG_NAME"));
+            Some(path)
+        }
+        #[cfg(not(unix))]
+        // TODO: it's `%APPDATA%` for windows.
+        compile_error!("For now only unix platforms are supported.")
+    };
+}
+
 #[derive(Debug)]
+// TODO: serparate, Othello errors, like IllegalMove, InvalidAlgebric, to
+// Internal Errors, like LegalMovesNotComputed, IoError, SerdeJsonError.
 pub enum OthelloError {
     InvalidAlgebric(String),
     IllegalMove { row: u8, col: u8 },
@@ -34,6 +61,7 @@ pub enum OthelloError {
     InvalidLenghtOfNotation,
     InvalidCharInNotation { ch: char },
     InvalidPlayerType,
+    SerdeJsonError(serde_json::Error),
 }
 
 impl Error for OthelloError {}
@@ -48,6 +76,7 @@ impl Display for OthelloError {
             OthelloError::InvalidLenghtOfNotation => write!(f, "the Othello Notation must be 64 characters long"),
             OthelloError::InvalidCharInNotation { ch } => write!(f, "invalid character {ch:?} in Othello Notation"),
             OthelloError::InvalidPlayerType => write!(f, "Invalid player type."),
+            OthelloError::SerdeJsonError(e) => write!(f, "SERIALIZATION ERROR: {e}"),
         }
     }
 }
@@ -58,7 +87,13 @@ impl From<io::Error> for OthelloError {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+impl From<serde_json::Error> for OthelloError {
+    fn from(value: serde_json::Error) -> Self {
+        OthelloError::SerdeJsonError(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Disc {
     White,
     Black,
@@ -337,7 +372,7 @@ impl FromStr for Board {
 }
 
 /// A position on the Othello Board
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Move {
     pub col: u8,
     pub row: u8,
@@ -389,21 +424,112 @@ pub fn bitfield_to_indexes(bitfield: u64) -> Vec<u8> {
     positions
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameSave {
+    /// Title of the save, will be showed in the replay command when selecting
+    pub title: String,
+    /// Black player's type
+    pub black_type: PlayerType,
+    /// White player's type
+    pub white_type: PlayerType,
+    /// Black player's name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_name: Option<Cow<'static, str>>,
+    /// White player's name
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub white_name: Option<Cow<'static, str>>,
+    /// Moves during the game
+    pub moves: Vec<Move>,
+    /// The state of the Game at the end, should not be [`State::Playing`]
+    pub end_state: State,
+}
+
+impl GameSave {
+    pub fn new(title: String, black: &dyn Player, white: &dyn Player) -> GameSave {
+        GameSave {
+            title,
+            black_type: black.player_type(),
+            white_type: white.player_type(),
+            black_name: black.name(),
+            white_name: white.name(),
+            moves: Vec::new(),
+            end_state: State::Playing,
+        }
+    }
+
+    pub fn push_move(&mut self, movemnt: Move) {
+        self.moves.push(movemnt);
+    }
+
+    pub fn set_end_state(&mut self, state: State) {
+        assert_ne!(state, State::Playing);
+        self.end_state = state;
+    }
+
+    /// Serializes the struct into a json string.
+    ///
+    /// If run in debug, the JSON will be pretty with spaces and newlines but
+    /// if it has been built in release mode it will be compact
+    #[inline]
+    #[track_caller]
+    pub fn to_json(&self) -> String {
+        if cfg!(debug_assertions) {
+            serde_json::to_string_pretty(self)
+        } else {
+            serde_json::to_string(self)
+        }
+        .unwrap()
+    }
+
+    #[inline]
+    pub fn from_json(data: &str) -> Result<GameSave, serde_json::Error> {
+        serde_json::from_str(data)
+    }
+
+    /// Interactively replay a game.
+    pub fn replay(&mut self) -> Result<()> {
+        // TODO: here create a `Game` with the data we know, the players should
+        // be some kind of ReplayPlayers, that will replay the game, and take
+        // the name of the previous players
+        todo!("IMPLEMENT THE REPLAY MECHANISM.")
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct GameSettings {
     /// Whetever we show the dots on the board or not
+    ///
+    /// # Default
+    ///
+    /// `true`
     pub show_legal_moves: bool,
+    /// Where we save the games, if the directory doesn't exists Giulio will
+    /// create it.
+    ///
+    /// # Default
+    ///
+    /// [`DEFAULT_GAME_SAVES_DIR`][struct@crate::DEFAULT_GAME_SAVES_DIR]
+    pub saves_game_dir: Option<PathBuf>,
+    /// Do we save the games?
+    ///
+    /// # Default
+    ///
+    /// `true`
+    pub game_record: bool,
 }
 
 impl Default for GameSettings {
     fn default() -> Self {
         GameSettings {
             show_legal_moves: true,
+            saves_game_dir: DEFAULT_GAME_SAVES_DIR.clone(),
+            game_record: true,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum State {
     /// The game is currently being played.
     Playing,
@@ -411,6 +537,8 @@ pub enum State {
     Winned {
         /// Who won the game?
         winner_color: Disc,
+        /// What's his name?
+        winner_name: String,
         /// Championship style score, the winner's score include empty squares
         winner_score: u8,
         /// Championship style score, the winner's score include empty squares
@@ -425,6 +553,7 @@ pub enum State {
 // TODO: make an option to disable all writes and replace with events.
 #[derive(Debug)]
 pub struct Game {
+    /// Squares of the game
     board: Board,
     /// Black player
     black_player: Box<dyn Player>,
@@ -444,6 +573,8 @@ pub struct Game {
     state: State,
     /// Game settings
     pub settings: GameSettings,
+    /// Game save should only be some if the settings has been enabled
+    save: Option<GameSave>,
 }
 
 impl Game {
@@ -458,15 +589,12 @@ impl Game {
 
     pub fn with_board(
         board: Board,
-        mut white_player: Box<dyn Player>,
-        mut black_player: Box<dyn Player>,
+        white_player: Box<dyn Player>,
+        black_player: Box<dyn Player>,
         stream: StandardStream,
         settings: GameSettings,
     ) -> Game {
-        white_player.init_color(Disc::White);
-        black_player.init_color(Disc::Black);
-
-        Game {
+        let mut game = Game {
             board,
             white_player,
             black_player,
@@ -475,10 +603,27 @@ impl Game {
             stream: RefCell::new(stream),
             state: State::Playing,
             settings,
+            save: None,
+        };
+
+        // player init
+        game.white_player.init_color(Disc::White);
+        game.black_player.init_color(Disc::Black);
+
+        // game save init
+        if game.settings.saves_game_dir.is_some() && game.settings.game_record {
+            let dt = Local::now();
+            game.save = Some(GameSave::new(
+                dt.to_rfc3339(),
+                game.black_player.as_ref(),
+                game.white_player.as_ref(),
+            ));
         }
+
+        game
     }
 
-    pub fn turn(&self) -> Disc {
+    fn turn(&self) -> Disc {
         debug_assert_ne!(self.turn, Disc::Empty);
         self.turn
     }
@@ -494,7 +639,7 @@ impl Game {
         Ok(Self::is_legal(moves, index))
     }
 
-    pub fn make_turn(&mut self, mov @ Move { col, row }: Move) -> Result<()> {
+    fn make_turn(&mut self, mov @ Move { col, row }: Move) -> Result<()> {
         // ensure the move is inside the legal moves.
         let idx = (row * 8 + col) as u64;
         if !self.is_legal_move(idx as usize)? {
@@ -529,28 +674,21 @@ impl Game {
                 self.render(None)?;
             }
 
-            match self.state {
+            match &self.state {
                 State::Playing => {}
                 State::Winned {
                     winner_color,
+                    winner_name,
                     winner_score,
                     loser_score,
                 } => {
                     let s = &mut *self.stream.borrow_mut();
-                    let winner = match winner_color {
-                        Disc::White => &self.white_player,
-                        Disc::Black => &self.black_player,
-                        Disc::Empty => unreachable!(),
-                    };
 
                     writeln!(s)?;
                     writeln!(
                         s,
                         "  Congratulation, {} ({})! you win with {}-{}",
-                        winner.force_name(),
-                        winner_color,
-                        winner_score,
-                        loser_score
+                        winner_name, winner_color, winner_score, loser_score
                     )?;
                     break;
                 }
@@ -588,6 +726,14 @@ impl Game {
                 previous_err = Some(e);
             };
 
+            // we store the move if we save the games.
+            if self.settings.game_record {
+                let Some(ref mut save) = self.save else {
+                    panic!("the sttings game record is true but the path is None, it shouldn't be possible.");
+                };
+                save.push_move(mov);
+            }
+
             match self.make_turn(mov) {
                 Ok(()) => {}
                 Err(e @ OthelloError::IllegalMove { .. }) => {
@@ -598,6 +744,35 @@ impl Game {
                 }
                 Err(e) => return Err(e),
             };
+        }
+        Ok(())
+    }
+
+    /// Post play, actions like storing the saved game.
+    // TODO: try to make it the implementation of Drop
+    pub fn post_play(self) -> Result<()> {
+        if let Some(mut save) = self.save {
+            save.end_state = self.state;
+
+            let json_save = save.to_json();
+            let saves_dir = self.settings.saves_game_dir.clone().unwrap();
+
+            let mut filepath = self
+                .settings
+                .saves_game_dir
+                .expect("HMMMM it should really really not be None this is an error.");
+
+            filepath.push(format!("{}.json", save.title));
+
+            if !saves_dir.exists() {
+                fs::create_dir_all(saves_dir)?;
+            }
+            let mut file = File::create_new(filepath)?;
+
+            file.write(json_save.as_bytes())?;
+            // write a new line otherwise on unix platform it may not be super
+            // happy.
+            file.write(b"\n")?;
         }
         Ok(())
     }
@@ -762,7 +937,15 @@ impl Game {
                 Disc::Black
             };
 
+            let winner_name: String = match winner_color {
+                Disc::White => self.white_name(),
+                Disc::Black => self.black_name(),
+                Disc::Empty => unreachable!(),
+            }
+            .into();
+
             self.state = State::Winned {
+                winner_name,
                 winner_color,
                 winner_score,
                 loser_score,

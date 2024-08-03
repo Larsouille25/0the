@@ -6,6 +6,10 @@ license = "BSD-2-Clause"
 authors = ["Thibault Vincent <th1bault.vincent@proton.me>"]
 
 [dependencies]
+chrono = { version = "0.4.38", features = ["serde"] }
+
 lazy_static = "1.5.0"
 rand = "0.8.5"
+serde = { version = "1.0.204", features = ["derive"] }
+serde_json = "1.0.122"
 termcolor = "1.4.1"

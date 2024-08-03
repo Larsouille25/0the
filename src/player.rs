@@ -3,9 +3,18 @@ use std::io::Write;
 use std::{borrow::Cow, io};
 
 use rand::seq::IteratorRandom;
+use serde::{Deserialize, Serialize};
 use termcolor::WriteColor;
 
 use crate::{bitfield_to_indexes, style, Disc, Game, Move, OthelloError, Result};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlayerType {
+    /// Human player
+    Human,
+    /// Robot player
+    Bot,
+}
 
 /// A player of the Othello Game, it may be Human, a bot like MinMax, AlphaBeta
 /// pruning, Monte Carlo Tree Search, a fancy powerful AI..
@@ -37,10 +46,14 @@ pub trait Player: Debug {
         }
     }
 
+    /// What is the player type? Human or Bot?
+    fn player_type(&self) -> PlayerType;
+
     /// Is the player, human, used to know when using the CLI whetever to print
     /// the board or not
+    #[inline]
     fn is_human(&self) -> bool {
-        false
+        self.player_type() == PlayerType::Human
     }
 }
 
@@ -101,8 +114,9 @@ impl Player for HumanPlayer {
         self.color = color;
     }
 
-    fn is_human(&self) -> bool {
-        true
+    #[inline]
+    fn player_type(&self) -> PlayerType {
+        PlayerType::Human
     }
 }
 
@@ -149,5 +163,10 @@ impl Player for RandomPlayer {
         assert_eq!(self.color, Disc::Empty);
         assert_ne!(color, Disc::Empty);
         self.color = color;
+    }
+
+    #[inline]
+    fn player_type(&self) -> PlayerType {
+        PlayerType::Bot
     }
 }
