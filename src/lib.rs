@@ -537,7 +537,7 @@ pub struct GameSettings {
     ///
     /// `true`
     pub show_legal_moves: bool,
-    /// Where we save the games, if the directory doesn't exists Giulio will
+    /// Where we save the games, if the directory doesn't exists 0the will
     /// create it.
     ///
     /// # Default

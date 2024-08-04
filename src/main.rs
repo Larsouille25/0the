@@ -9,7 +9,7 @@ use std::{
     str::FromStr,
 };
 
-use giulio::{
+use othe::{
     player::{HumanPlayer, Player, RandomPlayer},
     style, Board, Disc, Game, GameSave, GameSettings, OthelloError, State, LICENSE, OTHELLO_RULES,
     VERSION_AND_GIT_HASH,
@@ -233,7 +233,7 @@ pub fn replay_game(s: &mut StandardStream, settings: &GameSettings) -> Result<()
 fn main() -> Result<(), Box<dyn Error>> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
 
-    writeln!(s, "Welcome, in Giulio CLI!\n")?;
+    writeln!(s, "Welcome, in 0the CLI!\n")?;
     let help = format!(
         "\
 {} {}
@@ -243,13 +243,13 @@ COMMANDS:
     play, p             Start a new game
     import <notation>   Import a game using the Othello Notation
     replay, r           Replay a previously saved game
-    set                 Alter Giulio settings
+    set                 Alter 0the settings
     rules               Print the rules of Othello
     license             Print the license of the program
     help, h             Print this message
     quit, q             Quit the program\
     ",
-        env!("CARGO_PKG_NAME"),
+        env!("CARGO_BIN_NAME"),
         VERSION_AND_GIT_HASH,
         env!("CARGO_PKG_AUTHORS"),
     );

@@ -1,9 +1,13 @@
 [package]
-name = "giulio"
+name = "othe"
 version = "0.0.0"
 edition = "2021"
 license = "BSD-2-Clause"
 authors = ["Thibault Vincent <th1bault.vincent@proton.me>"]
+
+[[bin]]
+name = "0the"
+path = "src/main.rs"
 
 [dependencies]
 chrono = { version = "0.4.38", features = ["serde"] }
