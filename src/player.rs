@@ -1,5 +1,6 @@
 use std::fmt::Debug;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 use std::{borrow::Cow, io};
 
 use rand::seq::IteratorRandom;
@@ -52,7 +53,7 @@ pub trait Player: Debug {
     /// Is the player, human, used to know when using the CLI whetever to print
     /// the board or not
     #[inline]
-    fn is_human(&self) -> bool {
+    fn render_board(&self) -> bool {
         self.player_type() == PlayerType::Human
     }
 }
@@ -168,5 +169,57 @@ impl Player for RandomPlayer {
     #[inline]
     fn player_type(&self) -> PlayerType {
         PlayerType::Bot
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplayPlayer {
+    pub(crate) moves: Arc<Mutex<Vec<Move>>>,
+    pub(crate) move_idx: Arc<Mutex<usize>>,
+    pub(crate) color: Disc,
+    pub(crate) player_type: PlayerType,
+    pub(crate) name: Option<Cow<'static, str>>,
+}
+
+impl Player for ReplayPlayer {
+    fn color(&self) -> Disc {
+        self.color
+    }
+
+    fn think(&self, game: &Game, err: Option<OthelloError>) -> Result<Move> {
+        // ensure there is no error(s).
+        assert!(err.is_none());
+
+        // it shouldn't panic because the players move one after the other
+        let mut idx = self.move_idx.lock().unwrap();
+        let mov = self.moves.lock().unwrap()[*idx];
+        *idx += 1;
+
+        // Prompt the user
+        let mut s = game.stream.borrow_mut();
+        write!(s, "Press any key to continue...")?;
+        s.flush().unwrap();
+
+        // Wait for input
+        let _ = io::stdin().read(&mut [0u8])?;
+
+        Ok(mov)
+    }
+
+    fn name(&self) -> Option<Cow<'static, str>> {
+        self.name.clone()
+    }
+
+    fn init_color(&mut self, _: Disc) {
+        // nothing we already init the color in the replay
+    }
+
+    fn player_type(&self) -> PlayerType {
+        self.player_type
+    }
+
+    fn render_board(&self) -> bool {
+        // this is used to render the board.
+        true
     }
 }

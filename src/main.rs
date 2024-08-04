@@ -218,7 +218,8 @@ pub fn replay_game(s: &mut StandardStream, settings: &GameSettings) -> Result<()
 
                 save_file.read_to_string(&mut save_json)?;
                 let mut save = GameSave::from_json(&save_json)?;
-                save.replay()?;
+                let stream = StandardStream::stdout(ColorChoice::Auto);
+                save.replay(stream)?;
             }
         }
     } else {
@@ -286,8 +287,8 @@ COMMANDS:
                 Ok(())
             }
             ["quit" | "q"] => break,
-            unknown => {
-                writeln!(s, r#"Unknown command {unknown:?}, type "help" for help."#)?;
+            _ => {
+                writeln!(s, r#"Unknown command {cmd:?}, type "help" for help."#)?;
                 Ok(())
             }
         };

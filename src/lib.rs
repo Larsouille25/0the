@@ -9,6 +9,7 @@ use std::{
     ops::Not,
     path::PathBuf,
     str::FromStr,
+    sync::{Arc, Mutex},
 };
 
 use chrono::Local;
@@ -16,7 +17,7 @@ use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use termcolor::{StandardStream, WriteColor};
 
-use player::{Player, PlayerType};
+use player::{Player, PlayerType, ReplayPlayer};
 
 pub mod player;
 pub mod style;
@@ -488,11 +489,43 @@ impl GameSave {
     }
 
     /// Interactively replay a game.
-    pub fn replay(&mut self) -> Result<()> {
-        // TODO: here create a `Game` with the data we know, the players should
-        // be some kind of ReplayPlayers, that will replay the game, and take
-        // the name of the previous players
-        todo!("IMPLEMENT THE REPLAY MECHANISM.")
+    pub fn replay(&mut self, stream: StandardStream) -> Result<()> {
+        let moves = Arc::new(Mutex::new(self.moves.clone()));
+        let move_idx = Arc::new(Mutex::new(0_usize));
+
+        let black_player = ReplayPlayer {
+            moves: moves.clone(),
+            move_idx: move_idx.clone(),
+            color: Disc::Black,
+            player_type: self.black_type,
+            name: self.black_name.clone(),
+        };
+        let white_player = ReplayPlayer {
+            moves: moves.clone(),
+            move_idx: move_idx.clone(),
+            color: Disc::White,
+            player_type: self.white_type,
+            name: self.white_name.clone(),
+        };
+
+        let mut game = Game::new(
+            Box::new(white_player),
+            Box::new(black_player),
+            stream,
+            GameSettings {
+                show_legal_moves: true,
+                saves_game_dir: None,
+                game_record: false,
+            },
+        );
+
+        game.play()?;
+        let game_state = game.state.clone();
+        game.post_play()?;
+        // assert the replay in fact works and get the same result as recorded
+        assert_eq!(game_state, self.end_state);
+
+        Ok(())
     }
 }
 
@@ -670,7 +703,7 @@ impl Game {
     pub fn play(&mut self) -> Result<()> {
         loop {
             self.legal_moves();
-            if self.current_player().is_human() {
+            if self.current_player().render_board() {
                 self.render(None)?;
             }
 
