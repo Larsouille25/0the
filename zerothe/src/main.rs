@@ -1,7 +1,3 @@
-// TODO: Seperate the Othello interface (the binary) from the library (Othello Engine)
-
-// TODO: rerename this projet `0the` why? because it's simple like this project
-// and when the engine will be separated from the client, name it `othengine`
 use std::{
     error::Error,
     fs::{self, File},
@@ -233,7 +229,7 @@ pub fn replay_game(s: &mut StandardStream, settings: &GameSettings) -> Result<()
 fn main() -> Result<(), Box<dyn Error>> {
     let mut s = StandardStream::stdout(ColorChoice::Auto);
 
-    writeln!(s, "Welcome, in 0the CLI!\n")?;
+    writeln!(s, "Welcome, in Zerothe!\n")?;
     let help = format!(
         "\
 {} {}

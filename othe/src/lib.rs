@@ -23,13 +23,13 @@ pub mod player;
 pub mod style;
 
 pub const VERSION_AND_GIT_HASH: &str = env!("VERSION_AND_GIT_HASH");
-pub const LICENSE: &str = include_str!("../LICENSE");
+pub const LICENSE: &str = include_str!("../../LICENSE");
 /// The [official rules][or] of the Othello game of the
 /// [World Othello Federation][wof].
 ///
 /// [or]: https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english
 /// [wof]: https://www.worldothello.org
-pub const OTHELLO_RULES: &str = include_str!("../OTHELLO_RULES");
+pub const OTHELLO_RULES: &str = include_str!("../../OTHELLO_RULES");
 
 pub(crate) type Result<T, E = OthelloError> = std::result::Result<T, E>;
 

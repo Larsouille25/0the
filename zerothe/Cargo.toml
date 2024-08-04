@@ -1,0 +1,12 @@
+[package]
+name = "zerothe"
+description = "CLI for the 0the othello library"
+
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+othe.workspace = true
+termcolor.workspace = true

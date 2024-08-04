@@ -1,19 +1,17 @@
-[package]
-name = "othe"
+[workspace]
+members = [
+  "zerothe",
+  "othe",
+]
+
+resolver = "2"
+
+[workspace.package]
 version = "0.0.0"
 edition = "2021"
 license = "BSD-2-Clause"
 authors = ["Thibault Vincent <th1bault.vincent@proton.me>"]
 
-[[bin]]
-name = "0the"
-path = "src/main.rs"
-
-[dependencies]
-chrono = { version = "0.4.38", features = ["serde"] }
-
-lazy_static = "1.5.0"
-rand = "0.8.5"
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.122"
+[workspace.dependencies]
+othe = { path = "othe" }
 termcolor = "1.4.1"
